@@ -1,0 +1,19 @@
+[project]
+name = "game-players"
+version = "0.1.0"
+description = "Reinforcement-learning game players, starting with 2048."
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+gpu = ["numpy", "torch==2.9.1"]
+log = ["glog"]
+dev = ["pytest"]
+
+[project.scripts]
+game-players = "game_players.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["game_players*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
