@@ -11,11 +11,15 @@ python -m game_players.cli eval --games 100 --show-board
 
 The saved model is written to `models/2048-agent.pkl`.
 
-Training resumes from `models/2048-agent.pkl` by default when that checkpoint exists:
+Training resumes from `models/2048-agent.pkl` by default when that checkpoint exists. Training defaults to CPU, evaluates every 500 episodes, uses 50 evaluation games per report, saves the model every 1000 completed episodes, and saves the best eval checkpoint to `models/2048-agent.best.pkl`:
 
 ```bash
 python -m game_players.cli train --episodes 1000
 ```
+
+Change the periodic save interval with `--save-every`. A Ctrl-C also saves the model before exiting.
+
+N-tuple training uses board symmetry sharing plus alpha/epsilon decay by default. Disable symmetry with `--no-symmetry`, or tune decay with `--alpha-decay`, `--epsilon-decay`, `--min-alpha`, and `--min-epsilon`.
 
 To ignore an existing checkpoint and start over:
 
@@ -34,7 +38,7 @@ Set up dependencies in the local venv:
 
 ```bash
 python3 -m venv venv
-venv/bin/python -m pip install -e ".[gpu,log,dev]"
+venv/bin/python -m pip install -e ".[gpu,log,plot,dev]"
 ```
 
 You can force a specific agent:
@@ -50,6 +54,20 @@ Runtime logs use Python `glog`, so training and evaluation lines look like:
 I0517 00:57:59.432106 80581 cli.py:140] using n-tuple agent on cpu: no PyTorch GPU backend is available
 ```
 
+Training writes evaluation rows to `models/training-metrics.csv` by default. Generate an episode-vs-average-score chart:
+
+```bash
+python -m game_players.cli plot
+```
+
+For live-ish plotting while training runs in another terminal:
+
+```bash
+python -m game_players.cli plot --watch 10
+```
+
+That refreshes `models/training-progress.png` every 10 seconds.
+
 ## Planning the 2048 RL Agent
 
 The main decisions are:
@@ -59,6 +77,8 @@ The main decisions are:
 2. **What should the agent learn?** This implementation learns the value of an *afterstate*: the board after the swipe/merge but before the random tile appears. That removes one source of randomness from action evaluation. The agent can compare actions by `merge_reward + value(afterstate)`.
 
 3. **What function approximator is appropriate?** A full lookup table over all boards is impossible, and a neural network would add training complexity. N-tuple features are a strong middle ground for 2048: each feature looks at a small pattern such as a row, column, or 2x2 square, then stores a learned weight for the exact tile exponents in that pattern.
+
+   The default n-tuple set includes rows, columns, 2x2 squares, and wider 6-tuple patches. Older checkpoints are upgraded by appending the newer patterns with zero-initialized weights, so resume keeps previous learning while adding more capacity.
 
 4. **How does it learn?** It uses TD(0). After choosing a move and seeing the next board, it updates the previous afterstate toward:
 

@@ -35,6 +35,31 @@ BASE_PATTERNS: tuple[Pattern, ...] = (
 )
 
 
+SIX_TUPLE_PATTERNS: tuple[Pattern, ...] = (
+    (0, 1, 2, 4, 5, 6),
+    (1, 2, 3, 5, 6, 7),
+    (4, 5, 6, 8, 9, 10),
+    (5, 6, 7, 9, 10, 11),
+    (8, 9, 10, 12, 13, 14),
+    (9, 10, 11, 13, 14, 15),
+    (0, 4, 8, 1, 5, 9),
+    (2, 6, 10, 3, 7, 11),
+)
+
+
+DEFAULT_PATTERNS: tuple[Pattern, ...] = BASE_PATTERNS + SIX_TUPLE_PATTERNS
+SYMMETRY_MAPS: tuple[Pattern, ...] = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+    (12, 8, 4, 0, 13, 9, 5, 1, 14, 10, 6, 2, 15, 11, 7, 3),
+    (15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
+    (3, 7, 11, 15, 2, 6, 10, 14, 1, 5, 9, 13, 0, 4, 8, 12),
+    (3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12),
+    (12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3),
+    (0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15),
+    (15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0),
+)
+
+
 @dataclass
 class NTupleAgent:
     """A compact value-function agent using board pattern lookup tables."""
@@ -42,19 +67,30 @@ class NTupleAgent:
     alpha: float = 0.01
     gamma: float = 1.0
     epsilon: float = 0.05
+    min_alpha: float = 0.001
+    min_epsilon: float = 0.005
+    alpha_decay: float = 0.99995
+    epsilon_decay: float = 0.9999
+    use_symmetry: bool = True
     episodes_trained: int = 0
-    patterns: tuple[Pattern, ...] = BASE_PATTERNS
+    patterns: tuple[Pattern, ...] = DEFAULT_PATTERNS
     weights: DefaultDict[tuple[int, Pattern], float] = field(default_factory=lambda: defaultdict(float))
 
     def value(self, board: Board) -> float:
-        return sum(self.weights[(index, _feature(board, pattern))] for index, pattern in enumerate(self.patterns))
+        boards = _symmetries(board) if self.use_symmetry else (board,)
+        total = 0.0
+        for transformed in boards:
+            total += sum(self.weights[(index, _feature(transformed, pattern))] for index, pattern in enumerate(self.patterns))
+        return total / len(boards)
 
     def update_value(self, board: Board, target: float) -> float:
         prediction = self.value(board)
         error = target - prediction
-        scaled = self.alpha * error / len(self.patterns)
-        for index, pattern in enumerate(self.patterns):
-            self.weights[(index, _feature(board, pattern))] += scaled
+        boards = _symmetries(board) if self.use_symmetry else (board,)
+        scaled = self.alpha * error / (len(self.patterns) * len(boards))
+        for transformed in boards:
+            for index, pattern in enumerate(self.patterns):
+                self.weights[(index, _feature(transformed, pattern))] += scaled
         return error
 
     def action_values(self, board: Board) -> list[tuple[Action, float, Board, int]]:
@@ -87,6 +123,7 @@ class NTupleAgent:
             if not legal_actions(board):
                 if previous_after is not None:
                     self.update_value(previous_after, 0.0)
+                self.decay_learning_rates()
                 return GameResult(total_reward, max_tile(board), moves, board)
 
             action, after, reward = self.choose_action(board, rng, explore=True)
@@ -97,6 +134,10 @@ class NTupleAgent:
             previous_after = after
             total_reward += reward
             moves += 1
+
+    def decay_learning_rates(self) -> None:
+        self.alpha = max(self.min_alpha, self.alpha * self.alpha_decay)
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
 
     def play_episode(self, rng: random.Random | None = None) -> GameResult:
         rng = rng or random
@@ -115,6 +156,11 @@ class NTupleAgent:
             "alpha": self.alpha,
             "gamma": self.gamma,
             "epsilon": self.epsilon,
+            "min_alpha": self.min_alpha,
+            "min_epsilon": self.min_epsilon,
+            "alpha_decay": self.alpha_decay,
+            "epsilon_decay": self.epsilon_decay,
+            "use_symmetry": self.use_symmetry,
             "episodes_trained": self.episodes_trained,
             "patterns": self.patterns,
             "weights": dict(self.weights),
@@ -123,15 +169,23 @@ class NTupleAgent:
             pickle.dump(payload, file, protocol=pickle.HIGHEST_PROTOCOL)
 
     @classmethod
-    def load(cls, path: str) -> "NTupleAgent":
+    def load(cls, path: str, upgrade_patterns: bool = True) -> "NTupleAgent":
         with open(path, "rb") as file:
             payload = pickle.load(file)
+        patterns = tuple(payload["patterns"])
+        if upgrade_patterns and _is_prefix(patterns, DEFAULT_PATTERNS):
+            patterns = DEFAULT_PATTERNS
         agent = cls(
             alpha=payload["alpha"],
             gamma=payload["gamma"],
             epsilon=payload["epsilon"],
+            min_alpha=payload.get("min_alpha", 0.001),
+            min_epsilon=payload.get("min_epsilon", 0.005),
+            alpha_decay=payload.get("alpha_decay", 0.99995),
+            epsilon_decay=payload.get("epsilon_decay", 0.9999),
+            use_symmetry=payload.get("use_symmetry", True),
             episodes_trained=payload.get("episodes_trained", 0),
-            patterns=tuple(payload["patterns"]),
+            patterns=patterns,
         )
         agent.weights.update(payload["weights"])
         return agent
@@ -141,22 +195,34 @@ def _feature(board: Board, pattern: Pattern) -> tuple[int, ...]:
     return tuple(board[index] for index in pattern)
 
 
+def _symmetries(board: Board) -> tuple[Board, ...]:
+    return tuple(tuple(board[index] for index in mapping) for mapping in SYMMETRY_MAPS)
+
+
+def _is_prefix(prefix: tuple[Pattern, ...], patterns: tuple[Pattern, ...]) -> bool:
+    return len(prefix) <= len(patterns) and patterns[: len(prefix)] == prefix
+
+
 def _spawn_from_after(after: Board, rng: random.Random) -> Board:
     from .game2048 import add_random_tile
 
     return add_random_tile(after, rng)
 
 
-def summarize_results(results: Iterable[GameResult]) -> dict[str, float]:
+def summarize_results(results: Iterable[GameResult]) -> dict[str, object]:
     items = list(results)
     if not items:
         return {"games": 0}
     scores = [result.score for result in items]
     tiles = [result.max_tile for result in items]
+    tile_counts: dict[int, int] = {}
+    for tile in tiles:
+        tile_counts[tile] = tile_counts.get(tile, 0) + 1
     return {
         "games": len(items),
         "avg_score": sum(scores) / len(scores),
         "best_score": max(scores),
         "avg_max_tile": sum(tiles) / len(tiles),
         "best_max_tile": max(tiles),
+        "tile_counts": tile_counts,
     }
