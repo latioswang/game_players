@@ -42,6 +42,7 @@ class DQNAgent:
         self.target.load_state_dict(self.policy.state_dict())
         self.optimizer = torch.optim.AdamW(self.policy.parameters(), lr=self.config.learning_rate)
         self.replay: Deque[tuple[Board, Action, float, Board, bool]] = deque(maxlen=self.config.replay_size)
+        self.last_loss: float | None = None
 
     def choose_action(self, board: Board, rng: random.Random, explore: bool = True) -> Action:
         actions = legal_actions(board)
@@ -125,13 +126,17 @@ class DQNAgent:
 
         q = self.policy(state_t).gather(1, action_t).squeeze(1)
         with torch.no_grad():
-            next_q = self.target(next_t).max(dim=1).values
+            next_q_values = self.target(next_t)
+            next_mask = _legal_action_mask(torch, self.device, next_states)
+            next_q_values = next_q_values.masked_fill(~next_mask, -1e9)
+            next_q = next_q_values.max(dim=1).values
             target = reward_t + self.config.gamma * next_q * (1.0 - done_t)
 
         loss = self.nn.functional.smooth_l1_loss(q, target)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        self.last_loss = float(loss.detach().cpu())
 
         self.steps += 1
         if self.steps % self.config.target_sync == 0:
@@ -140,6 +145,14 @@ class DQNAgent:
 
 def _board_tensor(torch, device, board: Board):
     return torch.tensor([value / 16.0 for value in board], dtype=torch.float32, device=device)
+
+
+def _legal_action_mask(torch, device, boards: tuple[Board, ...]):
+    rows = []
+    for board in boards:
+        legal = set(legal_actions(board))
+        rows.append([action in legal for action in range(4)])
+    return torch.tensor(rows, dtype=torch.bool, device=device)
 
 
 class _Net:
@@ -153,4 +166,3 @@ class _Net:
             nn.ReLU(),
             nn.Linear(128, 4),
         )
-
