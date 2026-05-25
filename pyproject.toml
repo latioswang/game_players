@@ -1,12 +1,11 @@
 [project]
 name = "game-players"
 version = "0.1.0"
-description = "Reinforcement-learning game players, starting with 2048."
+description = "A fast heuristic Expectimax player for 2048."
 requires-python = ">=3.10"
+dependencies = ["glog", "numba", "numpy"]
 
 [project.optional-dependencies]
-gpu = ["numpy", "torch==2.9.1"]
-log = ["glog"]
 plot = ["matplotlib"]
 dev = ["pytest"]
 

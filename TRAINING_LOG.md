@@ -2,6 +2,96 @@
 
 This file records training observations, command changes, and experiment results so we can distinguish real learning effects from mixed-run chart artifacts.
 
+## 2026-05-26 07:36 CST
+
+### Fast Heuristic Expectimax Replacement
+
+Replaced the n-tuple/DQN public agent stack with the transcript winner: heuristic Expectimax. There is no training phase now.
+
+Code changes:
+
+- Added `game_players/expectimax_agent.py` with packed boards, precomputed row transitions, Numba-compiled move/heuristic/search kernels, exact random-spawn chance nodes, and summary metrics.
+- Replaced `game_players/cli.py` with `eval` and `play` only.
+- Removed the old n-tuple agent, DQN agent, device selector, autoresearch script, and n-tuple program notes.
+- Updated `README.md` around the no-training Expectimax workflow.
+- Added `numpy`, `numba`, and `glog` as runtime dependencies in `pyproject.toml`.
+
+Validation:
+
+```bash
+venv/bin/pytest -q
+```
+
+Result: `9 passed in 1.23s`.
+
+Smoke benchmark:
+
+```bash
+venv/bin/python -m game_players.cli eval --games 5 --seed 1 --depth 2
+```
+
+Result: `avg_score=29401.6`, `best_score=71760`, `avg_max_tile=2048.0`, `best_max_tile=4096`, `tile_counts=1024:2,2048:2,4096:1`, `wins_2048=3`, `win_rate_2048=0.600`, `avg_moves=1472.6`, `avg_seconds_per_game=0.403`, `total_seconds=2.016`.
+
+Full completed benchmark:
+
+```bash
+venv/bin/python -m game_players.cli eval --games 100 --seed 1 --depth 2
+```
+
+Result: `avg_score=25491.2`, `best_score=71760`, `avg_max_tile=1720.3`, `best_max_tile=4096`, `tile_counts=512:10,1024:33,2048:49,4096:8`, `wins_2048=57`, `win_rate_2048=0.570`, `avg_moves=1339.3`, `avg_seconds_per_game=0.629`, `total_seconds=62.914`.
+
+Depth-3 note:
+
+```bash
+venv/bin/python -m game_players.cli eval --games 100 --seed 1 --depth 3
+```
+
+Stopped twice after exceeding practical runtime, including one run stopped at about `2:48` with no completed output. Exact depth-3 chance expansion is too expensive for the current full-game benchmark, even with Numba recursion. The CLI default was set to depth `2` so the documented 100-game benchmark completes in about one minute on this machine. Depth `3` remains accepted for small experiments.
+
+## 2026-05-26 07:15 CST
+
+### Expectimax Lookahead Policy
+
+Reference: the requested YouTube comparison emphasized search methods for 2048, especially expectimax-style play over random tile spawns. The first local implementation keeps the existing n-tuple TD evaluator and adds expectimax only at evaluation time.
+
+Code changes:
+
+- `README.md`: added the improvement roadmap and the `--lookahead-depth` evaluation command.
+- `game_players/ntuple_agent.py`: added expectimax action scoring, exact random-spawn enumeration, per-decision memoization, and shared action-outcome generation.
+- `game_players/cli.py`: added `eval --lookahead-depth`; depth `1` preserves the previous greedy n-tuple policy.
+- `tests/test_ntuple_agent.py`: covered spawn probabilities and a fixture where depth-2 expectimax prefers a lower-immediate-reward move because of future spawn value.
+
+Validation:
+
+```bash
+venv/bin/pytest -q
+```
+
+Result: `9 passed in 0.03s`.
+
+Evaluation checkpoint:
+
+```bash
+models/2048-agent.best.pkl
+```
+
+Same-seed smoke comparison:
+
+| Command | Games | Seed | Depth | Avg Score | Best Score | Avg Max Tile | Best Max Tile | Tile Counts | Wall Time |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---:|
+| `venv/bin/python -m game_players.cli eval --model models/2048-agent.best.pkl --agent ntuple --games 3 --seed 1 --lookahead-depth 1` | 3 | 1 | 1 | 12416.0 | 15668 | 853.3 | 1024 | `512:1,1024:2` | 14.463s |
+| `venv/bin/python -m game_players.cli eval --model models/2048-agent.best.pkl --agent ntuple --games 3 --seed 1 --lookahead-depth 2` | 3 | 1 | 2 | 14946.7 | 16792 | 1024.0 | 1024 | `1024:3` | 52.893s |
+
+Additional baseline:
+
+```bash
+venv/bin/python -m game_players.cli eval --model models/2048-agent.best.pkl --agent ntuple --games 30 --seed 1 --lookahead-depth 1
+```
+
+Result: `avg_score=6948.5`, `best_score=15668`, `avg_max_tile=460.8`, `best_max_tile=1024`, `tile_counts=128:2,256:11,512:13,1024:4`.
+
+Attempted matching 30-game depth-2 eval, but stopped it after it exceeded two minutes without finishing. The three-game result suggests expectimax can improve decision quality, but the current dict-backed n-tuple value lookup is too slow for routine depth-2 or depth-3 benchmarks. Next implementation target should be faster n-tuple storage or a bounded/pruned expectimax mode before relying on larger search evaluations.
+
 ## 2026-05-17 04:45 CST
 
 ### Four-Way Symmetry and Epsilon Comparison
