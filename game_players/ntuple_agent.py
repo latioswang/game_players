@@ -48,6 +48,13 @@ SIX_TUPLE_PATTERNS: tuple[Pattern, ...] = (
 
 
 DEFAULT_PATTERNS: tuple[Pattern, ...] = BASE_PATTERNS + SIX_TUPLE_PATTERNS
+DEFAULT_ALPHA = 0.01
+DEFAULT_EPSILON = 0.05
+DEFAULT_MIN_ALPHA = 0.001
+DEFAULT_MIN_EPSILON = 0.005
+DEFAULT_ALPHA_DECAY = 0.99995
+DEFAULT_EPSILON_DECAY = 1.0
+DEFAULT_USE_SYMMETRY = False
 SYMMETRY_MAPS: tuple[Pattern, ...] = (
     (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
     (12, 8, 4, 0, 13, 9, 5, 1, 14, 10, 6, 2, 15, 11, 7, 3),
@@ -64,17 +71,20 @@ SYMMETRY_MAPS: tuple[Pattern, ...] = (
 class NTupleAgent:
     """A compact value-function agent using board pattern lookup tables."""
 
-    alpha: float = 0.01
+    alpha: float = DEFAULT_ALPHA
     gamma: float = 1.0
-    epsilon: float = 0.05
-    min_alpha: float = 0.001
-    min_epsilon: float = 0.005
-    alpha_decay: float = 0.99995
-    epsilon_decay: float = 0.9999
-    use_symmetry: bool = True
+    epsilon: float = DEFAULT_EPSILON
+    min_alpha: float = DEFAULT_MIN_ALPHA
+    min_epsilon: float = DEFAULT_MIN_EPSILON
+    alpha_decay: float = DEFAULT_ALPHA_DECAY
+    epsilon_decay: float = DEFAULT_EPSILON_DECAY
+    use_symmetry: bool = DEFAULT_USE_SYMMETRY
     episodes_trained: int = 0
     patterns: tuple[Pattern, ...] = DEFAULT_PATTERNS
     weights: DefaultDict[tuple[int, Pattern], float] = field(default_factory=lambda: defaultdict(float))
+    interval_delta_l2_sq: float = 0.0
+    interval_abs_td_error: float = 0.0
+    interval_updates: int = 0
 
     def value(self, board: Board) -> float:
         boards = _symmetries(board) if self.use_symmetry else (board,)
@@ -87,10 +97,14 @@ class NTupleAgent:
         prediction = self.value(board)
         error = target - prediction
         boards = _symmetries(board) if self.use_symmetry else (board,)
-        scaled = self.alpha * error / (len(self.patterns) * len(boards))
+        update_count = len(self.patterns) * len(boards)
+        scaled = self.alpha * error / update_count
         for transformed in boards:
             for index, pattern in enumerate(self.patterns):
                 self.weights[(index, _feature(transformed, pattern))] += scaled
+        self.interval_delta_l2_sq += update_count * scaled * scaled
+        self.interval_abs_td_error += abs(error)
+        self.interval_updates += 1
         return error
 
     def action_values(self, board: Board) -> list[tuple[Action, float, Board, int]]:
@@ -139,6 +153,27 @@ class NTupleAgent:
         self.alpha = max(self.min_alpha, self.alpha * self.alpha_decay)
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
 
+    def diagnostics(self, reset_interval: bool = False) -> dict[str, float]:
+        weight_count = len(self.weights)
+        weight_l2_sq = sum(weight * weight for weight in self.weights.values())
+        weight_abs = sum(abs(weight) for weight in self.weights.values())
+        interval_updates = self.interval_updates
+        metrics = {
+            "alpha": self.alpha,
+            "epsilon": self.epsilon,
+            "weight_count": float(weight_count),
+            "weight_l2": weight_l2_sq**0.5,
+            "weight_abs_mean": weight_abs / weight_count if weight_count else 0.0,
+            "weight_delta_l2": self.interval_delta_l2_sq**0.5,
+            "td_error_abs_avg": self.interval_abs_td_error / interval_updates if interval_updates else 0.0,
+            "td_updates": float(interval_updates),
+        }
+        if reset_interval:
+            self.interval_delta_l2_sq = 0.0
+            self.interval_abs_td_error = 0.0
+            self.interval_updates = 0
+        return metrics
+
     def play_episode(self, rng: random.Random | None = None) -> GameResult:
         rng = rng or random
         board = new_game(rng)
@@ -179,11 +214,11 @@ class NTupleAgent:
             alpha=payload["alpha"],
             gamma=payload["gamma"],
             epsilon=payload["epsilon"],
-            min_alpha=payload.get("min_alpha", 0.001),
-            min_epsilon=payload.get("min_epsilon", 0.005),
-            alpha_decay=payload.get("alpha_decay", 0.99995),
-            epsilon_decay=payload.get("epsilon_decay", 0.9999),
-            use_symmetry=payload.get("use_symmetry", True),
+            min_alpha=payload.get("min_alpha", DEFAULT_MIN_ALPHA),
+            min_epsilon=payload.get("min_epsilon", DEFAULT_MIN_EPSILON),
+            alpha_decay=payload.get("alpha_decay", DEFAULT_ALPHA_DECAY),
+            epsilon_decay=payload.get("epsilon_decay", DEFAULT_EPSILON_DECAY),
+            use_symmetry=payload.get("use_symmetry", DEFAULT_USE_SYMMETRY),
             episodes_trained=payload.get("episodes_trained", 0),
             patterns=patterns,
         )

@@ -11,7 +11,17 @@ import glog as log
 from .game2048 import render
 from .device import best_torch_device
 from .metrics import append_metrics, plot_metrics
-from .ntuple_agent import NTupleAgent, summarize_results
+from .ntuple_agent import (
+    DEFAULT_ALPHA,
+    DEFAULT_ALPHA_DECAY,
+    DEFAULT_EPSILON,
+    DEFAULT_EPSILON_DECAY,
+    DEFAULT_MIN_ALPHA,
+    DEFAULT_MIN_EPSILON,
+    DEFAULT_USE_SYMMETRY,
+    NTupleAgent,
+    summarize_results,
+)
 
 
 def main() -> None:
@@ -22,16 +32,21 @@ def main() -> None:
     train.add_argument("--episodes", type=int, default=1000)
     train.add_argument("--model", default="models/2048-agent.pkl")
     train.add_argument("--seed", type=int, default=0)
-    train.add_argument("--alpha", type=float, default=0.01)
-    train.add_argument("--epsilon", type=float, default=0.05)
-    train.add_argument("--min-alpha", type=float, default=0.001)
-    train.add_argument("--min-epsilon", type=float, default=0.005)
-    train.add_argument("--alpha-decay", type=float, default=0.99995)
-    train.add_argument("--epsilon-decay", type=float, default=0.9999)
+    train.add_argument("--alpha", type=float, default=None)
+    train.add_argument("--epsilon", type=float, default=None)
+    train.add_argument("--min-alpha", type=float, default=None)
+    train.add_argument("--min-epsilon", type=float, default=None)
+    train.add_argument("--alpha-decay", type=float, default=None)
+    train.add_argument("--epsilon-decay", type=float, default=None)
     train.add_argument("--eval-every", type=int, default=500)
     train.add_argument("--eval-games", type=int, default=50)
     train.add_argument("--fresh", action="store_true", help="start a new model even if --model already exists")
-    train.add_argument("--no-symmetry", action="store_true", help="disable n-tuple symmetry sharing")
+    train.add_argument(
+        "--symmetry",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="n-tuple symmetry sharing: fresh auto uses the default; resume auto preserves checkpoint setting",
+    )
     train.add_argument("--agent", choices=["auto", "ntuple", "dqn"], default="auto")
     train.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="cpu")
     train.add_argument("--metrics", default="models/training-metrics.csv")
@@ -49,6 +64,7 @@ def main() -> None:
     plot = subparsers.add_parser("plot", help="plot training metrics")
     plot.add_argument("--metrics", default="models/training-metrics.csv")
     plot.add_argument("--output", default="models/training-progress.png")
+    plot.add_argument("--series", default="eval_avg_score", help="comma-separated CSV columns to plot")
     plot.add_argument("--watch", type=float, default=None, help="refresh the output image every N seconds")
 
     args = parser.parse_args()
@@ -57,7 +73,8 @@ def main() -> None:
     elif args.command == "eval":
         evaluate_agent(args)
     elif args.command == "plot":
-        plot_metrics(args.metrics, args.output, args.watch)
+        series = [name.strip() for name in args.series.split(",") if name.strip()]
+        plot_metrics(args.metrics, args.output, series, args.watch)
         log.info("wrote training plot to %s", args.output)
 
 
@@ -81,7 +98,7 @@ def train_agent(args: argparse.Namespace) -> None:
         log.info("resuming DQN %s from episode %s on %s", args.model, agent.episodes_trained, device)
     elif model_path.exists() and not args.fresh:
         agent = NTupleAgent.load(args.model)
-        _configure_ntuple_agent(agent, args)
+        _configure_ntuple_agent(agent, args, is_fresh=False)
         log.info(
             "resuming n-tuple %s from episode %s on cpu with %s patterns symmetry=%s",
             args.model,
@@ -97,7 +114,7 @@ def train_agent(args: argparse.Namespace) -> None:
             log.info("starting a new DQN model on %s", device)
         else:
             agent = NTupleAgent()
-            _configure_ntuple_agent(agent, args)
+            _configure_ntuple_agent(agent, args, is_fresh=True)
             log.info("starting a new n-tuple model on cpu")
         if args.fresh:
             log.info("existing checkpoint will be overwritten at save time")
@@ -111,10 +128,11 @@ def train_agent(args: argparse.Namespace) -> None:
         for episode in range(1, args.episodes + 1):
             result = agent.train_episode(rng)
             agent.episodes_trained += 1
-            if episode == 1 or episode % args.eval_every == 0:
+            if agent.episodes_trained == 1 or agent.episodes_trained % args.eval_every == 0:
                 eval_results = [agent.play_episode(rng) for _ in range(args.eval_games)]
                 summary = summarize_results(eval_results)
                 agent_metrics = _agent_metrics(agent)
+                diagnostics = _agent_diagnostics(agent)
                 tile_counts = _format_tile_counts(summary["tile_counts"])
                 log.info(
                     "episode=%s train_score=%s train_tile=%s eval_avg_score=%.1f eval_best_tile=%.0f %s eval_tiles=%s",
@@ -135,6 +153,10 @@ def train_agent(args: argparse.Namespace) -> None:
                         "eval_avg_score": f"{summary['avg_score']:.1f}",
                         "eval_best_tile": f"{summary['best_max_tile']:.0f}",
                         "eval_tile_counts": tile_counts,
+                        "pct_512": f"{_tile_pct(summary['tile_counts'], args.eval_games, 512):.3f}",
+                        "pct_1024": f"{_tile_pct(summary['tile_counts'], args.eval_games, 1024):.3f}",
+                        "pct_2048": f"{_tile_pct(summary['tile_counts'], args.eval_games, 2048):.3f}",
+                        **diagnostics,
                         "agent_metrics": agent_metrics,
                     },
                 )
@@ -186,14 +208,25 @@ def _save_agent(agent: object, path: str) -> None:
     log.info("saved model to %s at episode %s", path, getattr(agent, "episodes_trained", "unknown"))
 
 
-def _configure_ntuple_agent(agent: NTupleAgent, args: argparse.Namespace) -> None:
-    agent.alpha = args.alpha
-    agent.epsilon = args.epsilon
-    agent.min_alpha = args.min_alpha
-    agent.min_epsilon = args.min_epsilon
-    agent.alpha_decay = args.alpha_decay
-    agent.epsilon_decay = args.epsilon_decay
-    agent.use_symmetry = not args.no_symmetry
+def _configure_ntuple_agent(agent: NTupleAgent, args: argparse.Namespace, is_fresh: bool) -> None:
+    if args.alpha is not None or is_fresh:
+        agent.alpha = DEFAULT_ALPHA if args.alpha is None else args.alpha
+    if args.epsilon is not None or is_fresh:
+        agent.epsilon = DEFAULT_EPSILON if args.epsilon is None else args.epsilon
+    if args.min_alpha is not None or is_fresh:
+        agent.min_alpha = DEFAULT_MIN_ALPHA if args.min_alpha is None else args.min_alpha
+    if args.min_epsilon is not None or is_fresh:
+        agent.min_epsilon = DEFAULT_MIN_EPSILON if args.min_epsilon is None else args.min_epsilon
+    if args.alpha_decay is not None or is_fresh:
+        agent.alpha_decay = DEFAULT_ALPHA_DECAY if args.alpha_decay is None else args.alpha_decay
+    if args.epsilon_decay is not None or is_fresh:
+        agent.epsilon_decay = DEFAULT_EPSILON_DECAY if args.epsilon_decay is None else args.epsilon_decay
+    if args.symmetry == "on":
+        agent.use_symmetry = True
+    elif args.symmetry == "off":
+        agent.use_symmetry = False
+    elif is_fresh:
+        agent.use_symmetry = DEFAULT_USE_SYMMETRY
 
 
 def _default_best_model_path(model_path: str) -> str:
@@ -221,8 +254,30 @@ def _agent_metrics(agent: object) -> str:
     return ""
 
 
+def _agent_diagnostics(agent: object) -> dict[str, str]:
+    if hasattr(agent, "diagnostics"):
+        diagnostics = agent.diagnostics(reset_interval=True)
+        return {
+            "alpha": f"{diagnostics['alpha']:.8f}",
+            "epsilon": f"{diagnostics['epsilon']:.8f}",
+            "weight_count": f"{diagnostics['weight_count']:.0f}",
+            "weight_l2": f"{diagnostics['weight_l2']:.8f}",
+            "weight_abs_mean": f"{diagnostics['weight_abs_mean']:.8f}",
+            "weight_delta_l2": f"{diagnostics['weight_delta_l2']:.8f}",
+            "td_error_abs_avg": f"{diagnostics['td_error_abs_avg']:.8f}",
+            "td_updates": f"{diagnostics['td_updates']:.0f}",
+        }
+    return {}
+
+
 def _format_tile_counts(tile_counts: dict[int, int]) -> str:
     return ",".join(f"{tile}:{count}" for tile, count in sorted(tile_counts.items()))
+
+
+def _tile_pct(tile_counts: dict[int, int], games: int, threshold: int) -> float:
+    if games <= 0:
+        return 0.0
+    return sum(count for tile, count in tile_counts.items() if tile >= threshold) / games
 
 
 def _select_agent(args: argparse.Namespace) -> tuple[str, str]:

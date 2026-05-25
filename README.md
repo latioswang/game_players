@@ -19,7 +19,7 @@ python -m game_players.cli train --episodes 1000
 
 Change the periodic save interval with `--save-every`. A Ctrl-C also saves the model before exiting.
 
-N-tuple training uses board symmetry sharing plus alpha/epsilon decay by default. Disable symmetry with `--no-symmetry`, or tune decay with `--alpha-decay`, `--epsilon-decay`, `--min-alpha`, and `--min-epsilon`.
+Fresh n-tuple training defaults to symmetry sharing off and fixed epsilon (`--epsilon-decay 1.0`), based on the 2026-05 comparison in `TRAINING_LOG.md`. Resumed checkpoints preserve their saved symmetry mode and decayed alpha/epsilon values unless you explicitly pass replacement flags. Control symmetry with `--symmetry auto`, `--symmetry on`, or `--symmetry off`; tune decay with `--alpha-decay`, `--epsilon-decay`, `--min-alpha`, and `--min-epsilon`.
 
 To ignore an existing checkpoint and start over:
 
@@ -67,6 +67,14 @@ python -m game_players.cli plot --watch 10
 ```
 
 That refreshes `models/training-progress.png` every 10 seconds.
+
+Useful diagnostic plots:
+
+```bash
+python -m game_players.cli plot --series eval_avg_score,pct_1024,pct_2048
+python -m game_players.cli plot --series eval_avg_score,weight_delta_l2,td_error_abs_avg,weight_l2
+python -m game_players.cli plot --series alpha,epsilon
+```
 
 ## Planning the 2048 RL Agent
 
