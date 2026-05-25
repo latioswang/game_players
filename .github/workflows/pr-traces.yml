@@ -1,0 +1,129 @@
+name: PR traces
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize, reopened, closed]
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  traces:
+    name: Publish PR traces
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Post Slack and Linear traces
+        uses: actions/github-script@v7
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const linearKey = process.env.LINEAR_API_KEY || "";
+            const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL || "";
+
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.info("No pull request payload; skipping.");
+              return;
+            }
+
+            const action = context.payload.action || context.eventName;
+            const review = context.payload.review;
+            const repoName = `${context.repo.owner}/${context.repo.repo}`;
+            const mergedText = pr.merged ? "merged" : "closed";
+            const status =
+              action === "closed" ? mergedText :
+              review ? `review ${review.state}` :
+              action;
+
+            const text = [
+              `${repoName} PR #${pr.number}: ${status}`,
+              pr.title,
+              pr.html_url,
+            ].join("\n");
+
+            const idSource = [
+              pr.title || "",
+              pr.body || "",
+              pr.head?.ref || "",
+            ].join("\n");
+            const linearIds = Array.from(new Set(idSource.match(/\b[A-Z][A-Z0-9]+-\d+\b/g) || []));
+
+            if (slackWebhookUrl) {
+              try {
+                const response = await fetch(slackWebhookUrl, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ text }),
+                });
+                if (!response.ok) {
+                  core.warning(`Slack trace failed: ${response.status} ${await response.text()}`);
+                }
+              } catch (error) {
+                core.warning(`Slack trace failed: ${error.message}`);
+              }
+            } else {
+              core.info("SLACK_WEBHOOK_URL is not configured; skipping Slack trace.");
+            }
+
+            if (linearKey && linearIds.length) {
+              const graphql = async (query, variables) => {
+                const response = await fetch("https://api.linear.app/graphql", {
+                  method: "POST",
+                  headers: {
+                    authorization: linearKey,
+                    "content-type": "application/json",
+                  },
+                  body: JSON.stringify({ query, variables }),
+                });
+
+                const payload = await response.json();
+                if (!response.ok || payload.errors) {
+                  throw new Error(JSON.stringify(payload.errors || payload));
+                }
+                return payload.data;
+              };
+
+              for (const identifier of linearIds) {
+                try {
+                  const lookup = await graphql(
+                    `query IssueByIdentifier($identifier: String!) {
+                      issues(filter: { identifier: { eq: $identifier } }, first: 1) {
+                        nodes { id identifier title url }
+                      }
+                    }`,
+                    { identifier },
+                  );
+                  const issue = lookup.issues.nodes[0];
+                  if (!issue) {
+                    core.warning(`Linear issue ${identifier} was not found.`);
+                    continue;
+                  }
+
+                  await graphql(
+                    `mutation CommentCreate($issueId: String!, $body: String!) {
+                      commentCreate(input: { issueId: $issueId, body: $body }) {
+                        success
+                      }
+                    }`,
+                    {
+                      issueId: issue.id,
+                      body: `GitHub PR trace: **${status}**\n\n${pr.title}\n${pr.html_url}`,
+                    },
+                  );
+                } catch (error) {
+                  core.warning(`Linear trace for ${identifier} failed: ${error.message}`);
+                }
+              }
+            } else if (!linearKey) {
+              core.info("LINEAR_API_KEY is not configured; skipping Linear trace.");
+            } else {
+              core.info("No Linear issue identifier found in PR title, body, or branch.");
+            }

@@ -1,9 +1,13 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+*.pyo
+*.pyd
 .DS_Store
+
 models/
 results.tsv
 venv/
 venv-*/
+.venv/
 *.egg-info/
