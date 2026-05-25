@@ -11,6 +11,7 @@ from .expectimax_agent import (
     MAX_DEPTH,
     ExpectimaxAgent,
     action_name,
+    auto_worker_count,
     evaluate_games,
     validate_depth,
 )
@@ -25,6 +26,7 @@ def main() -> None:
     evaluate.add_argument("--games", type=int, default=100)
     evaluate.add_argument("--seed", type=int, default=1)
     evaluate.add_argument("--depth", type=int, default=2, help=f"Expectimax depth, 1-{MAX_DEPTH}")
+    evaluate.add_argument("--workers", default="auto", help="parallel eval workers: positive integer or 'auto'")
 
     play = subparsers.add_parser("play", help="run one Expectimax game")
     play.add_argument("--seed", type=int, default=1)
@@ -42,11 +44,13 @@ def evaluate_agent(args: argparse.Namespace) -> None:
     _validate_depth_or_exit(args.depth)
     if args.games < 1:
         raise SystemExit("--games must be at least 1")
+    workers = _resolve_workers(args.workers)
     agent = ExpectimaxAgent(depth=args.depth)
     agent.warm_up()
-    summary = evaluate_games(agent, games=args.games, seed=args.seed)
+    summary = evaluate_games(agent, games=args.games, seed=args.seed, workers=workers)
     log.info("games=%s", summary.games)
     log.info("depth=%s", args.depth)
+    log.info("workers=%s", workers)
     log.info("avg_score=%.1f", summary.avg_score)
     log.info("best_score=%s", summary.best_score)
     log.info("avg_max_tile=%.1f", summary.avg_max_tile)
@@ -79,6 +83,18 @@ def _validate_depth_or_exit(depth: int) -> None:
         validate_depth(depth)
     except ValueError as exc:
         raise SystemExit(f"--depth {exc}") from exc
+
+
+def _resolve_workers(value: str) -> int:
+    if value == "auto":
+        return auto_worker_count()
+    try:
+        workers = int(value)
+    except ValueError as exc:
+        raise SystemExit("--workers must be a positive integer or 'auto'") from exc
+    if workers < 1:
+        raise SystemExit("--workers must be at least 1")
+    return workers
 
 
 def _format_tile_counts(tile_counts: dict[int, int]) -> str:

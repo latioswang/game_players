@@ -1,8 +1,9 @@
 import pytest
 
-from game_players.cli import _validate_depth_or_exit
+from game_players.cli import _resolve_workers, _validate_depth_or_exit
 from game_players.expectimax_agent import (
     ExpectimaxAgent,
+    evaluate_games,
     heuristic_score,
     move_packed,
     pack_board,
@@ -108,3 +109,22 @@ def test_cli_rejects_invalid_depth():
         _validate_depth_or_exit(0)
     with pytest.raises(SystemExit):
         _validate_depth_or_exit(6)
+
+
+def test_parallel_evaluation_keeps_requested_game_count():
+    agent = ExpectimaxAgent(depth=1)
+    agent.warm_up()
+
+    summary = evaluate_games(agent, games=2, seed=1, workers=2)
+
+    assert summary.games == 2
+    assert sum(summary.tile_counts.values()) == 2
+
+
+def test_worker_resolution_accepts_auto_and_rejects_invalid_values():
+    assert _resolve_workers("1") == 1
+    assert _resolve_workers("auto") >= 1
+    with pytest.raises(SystemExit):
+        _resolve_workers("0")
+    with pytest.raises(SystemExit):
+        _resolve_workers("many")
