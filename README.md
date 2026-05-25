@@ -1,102 +1,64 @@
 # game_players
 
-Reinforcement-learning game players. The first implementation is a 2048 agent that learns with temporal-difference RL and an n-tuple value function.
+A fast 2048 player using heuristic Expectimax. This version focuses on the
+best-performing approach from the referenced video: search over future swipes,
+exact random tile spawns, and a handcrafted board heuristic. There is no
+training phase.
 
-## Run it
-
-```bash
-python -m game_players.cli train --episodes 1000 --eval-every 100
-python -m game_players.cli eval --games 100 --show-board
-```
-
-The saved model is written to `models/2048-agent.pkl`.
-
-Training resumes from `models/2048-agent.pkl` by default when that checkpoint exists. Training defaults to CPU, evaluates every 500 episodes, uses 50 evaluation games per report, saves the model every 1000 completed episodes, and saves the best eval checkpoint to `models/2048-agent.best.pkl`:
-
-```bash
-python -m game_players.cli train --episodes 1000
-```
-
-Change the periodic save interval with `--save-every`. A Ctrl-C also saves the model before exiting.
-
-N-tuple training uses board symmetry sharing plus alpha/epsilon decay by default. Disable symmetry with `--no-symmetry`, or tune decay with `--alpha-decay`, `--epsilon-decay`, `--min-alpha`, and `--min-epsilon`.
-
-To ignore an existing checkpoint and start over:
-
-```bash
-python -m game_players.cli train --fresh --episodes 1000
-```
-
-By default, training tries to use the best target available on the current computer:
-
-- If PyTorch is installed and a GPU backend is available, it uses the PyTorch DQN agent.
-- On Apple Silicon Macs, the GPU backend is Apple Metal/MPS.
-- If no PyTorch GPU backend is available, it falls back to the CPU n-tuple agent.
-- Codex's command sandbox can block PyTorch's MPS check and produce a misleading macOS-version error. Run training from a normal shell, or allow the command to run outside the sandbox, to use MPS.
-
-Set up dependencies in the local venv:
+## Set Up
 
 ```bash
 python3 -m venv venv
-venv/bin/python -m pip install -e ".[gpu,log,plot,dev]"
+venv/bin/python -m pip install -e ".[dev,plot]"
 ```
 
-You can force a specific agent:
+Runtime dependencies are `numpy`, `numba`, and `glog`.
+
+## Run It
+
+Evaluate the player over many games:
 
 ```bash
-python -m game_players.cli train --agent dqn --device auto
-python -m game_players.cli train --agent ntuple
+python -m game_players.cli eval --games 100 --seed 1 --depth 2
 ```
 
-Runtime logs use Python `glog`, so training and evaluation lines look like:
-
-```text
-I0517 00:57:59.432106 80581 cli.py:140] using n-tuple agent on cpu: no PyTorch GPU backend is available
-```
-
-Training writes evaluation rows to `models/training-metrics.csv` by default. Generate an episode-vs-average-score chart:
+Run one game and print the final board:
 
 ```bash
-python -m game_players.cli plot
+python -m game_players.cli play --seed 1 --depth 2 --show-board
 ```
 
-For live-ish plotting while training runs in another terminal:
+Depth controls how many player moves Expectimax searches. Valid depths are
+`1` through `5`; depth `2` is the default because exact depth `3` expands a
+large chance tree and is much slower.
 
-```bash
-python -m game_players.cli plot --watch 10
-```
+## How It Works
 
-That refreshes `models/training-progress.png` every 10 seconds.
+1. The board stores tile exponents, so `1` means `2`, `2` means `4`, and so on.
+2. Row move transitions are precomputed for all `16^4` possible rows.
+3. Numba-compiled helpers apply moves and score leaf boards quickly.
+4. Expectimax max nodes choose the best swipe.
+5. Chance nodes enumerate every empty-cell spawn with `2` probability `0.9` and `4` probability `0.1`.
+6. Leaf boards are scored with empty-cell, monotonicity, smoothness, merge-potential, corner-max, and large-tile bonuses.
 
-## Planning the 2048 RL Agent
+Evaluation reports:
 
-The main decisions are:
-
-1. **What is the environment?** 2048 is a Markov decision process: the state is the 4x4 board, the action is one of four swipes, the reward is the sum of merged tile values, and the environment adds a random `2` or `4` tile after each valid move.
-
-2. **What should the agent learn?** This implementation learns the value of an *afterstate*: the board after the swipe/merge but before the random tile appears. That removes one source of randomness from action evaluation. The agent can compare actions by `merge_reward + value(afterstate)`.
-
-3. **What function approximator is appropriate?** A full lookup table over all boards is impossible, and a neural network would add training complexity. N-tuple features are a strong middle ground for 2048: each feature looks at a small pattern such as a row, column, or 2x2 square, then stores a learned weight for the exact tile exponents in that pattern.
-
-   The default n-tuple set includes rows, columns, 2x2 squares, and wider 6-tuple patches. Older checkpoints are upgraded by appending the newer patterns with zero-initialized weights, so resume keeps previous learning while adding more capacity.
-
-4. **How does it learn?** It uses TD(0). After choosing a move and seeing the next board, it updates the previous afterstate toward:
-
-   ```text
-   next_merge_reward + gamma * value(next_afterstate)
-   ```
-
-   At the end of a game, the final afterstate is updated toward `0` because no future reward remains.
-
-5. **How does it explore?** During training, epsilon-greedy exploration occasionally picks a random legal move. Evaluation disables exploration and always chooses the highest-valued move.
-
-6. **What is the reward?** The reward is the score gained by merges on each move, matching the official game score. This makes the learned objective easy to interpret.
-
-7. **What is the first quality bar?** The code should run with only the Python standard library, have deterministic seeds for repeatable experiments, and include tests for the move mechanics because bad 2048 mechanics would invalidate all learning results.
+- `games`
+- `avg_score`
+- `best_score`
+- `avg_max_tile`
+- `best_max_tile`
+- `tile_counts`
+- `wins_2048`
+- `win_rate_2048`
+- `avg_moves`
+- `avg_seconds_per_game`
+- `total_seconds`
 
 ## Files
 
-- `game_players/game2048.py`: board representation and game rules.
-- `game_players/ntuple_agent.py`: TD learner and policy.
-- `game_players/cli.py`: training and evaluation commands.
-- `tests/test_game2048.py`: core mechanics tests.
+- `game_players/game2048.py`: reference 2048 game rules and rendering.
+- `game_players/expectimax_agent.py`: packed-board engine and Expectimax player.
+- `game_players/cli.py`: `eval` and `play` commands.
+- `tests/test_game2048.py`: reference mechanics tests.
+- `tests/test_expectimax_agent.py`: Expectimax and heuristic tests.
