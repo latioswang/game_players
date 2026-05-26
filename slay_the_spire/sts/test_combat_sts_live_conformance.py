@@ -72,13 +72,19 @@ def _import_sts_from_env() -> ModuleType:
         pytest.skip(f"STS_LIGHTSPEED_MODULE_DIR does not exist: {path}")
 
     original_sys_path = list(sys.path)
+    previous_module = sys.modules.pop("slaythespire", None)
     sys.path.insert(0, str(path.resolve()))
     try:
-        return importlib.import_module("slaythespire")
+        module = importlib.import_module("slaythespire")
     except ImportError as exc:
         pytest.skip(f"could not import slaythespire from STS_LIGHTSPEED_MODULE_DIR: {exc}")
     finally:
         sys.path[:] = original_sys_path
+        if previous_module is None:
+            sys.modules.pop("slaythespire", None)
+        else:
+            sys.modules["slaythespire"] = previous_module
+    return module
 
 
 def _strict_combat_conformance_enabled() -> bool:
