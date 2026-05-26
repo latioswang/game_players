@@ -166,12 +166,31 @@ combat fixtures once the combat API supports them.
 
 ## Recommended Sequence
 
-1. Add action-level combat bindings or a local adapter around equivalent
-   `sts_lightspeed` internals.
-2. Implement deterministic combat state serialization and cloning tests.
-3. Build a beam-search combat player with handcrafted leaf evaluation.
-4. Run fixed-seed comparisons against `sts_lightspeed.Agent`.
-5. Save planner trajectories for model training.
-6. Train a value function and use it as the planner leaf evaluator.
-7. Train a policy model for action pruning and low-budget decisions.
-8. Iterate on the hybrid policy with regression seed tracking.
+Current checkpoint:
+
+- Completed locally: combat state/action contracts, fixture and protocol
+  adapters, deterministic serialization helpers, fixture cloning tests,
+  beam-search planning over abstract combat simulators, JSONL trajectory
+  records, handcrafted value scoring, linear value-function training,
+  policy action priors, hybrid policy orchestration, fixed-seed fixture
+  experiments, regression tracking, and combat metric aggregation.
+- Not completed live: the Python `sts_lightspeed` binding still does not
+  expose combat legal-action enumeration, single-action application,
+  action-level combat pause/resume, cheap live combat cloning, or live
+  combat-only outcome metrics.
+
+Next checkpoint:
+
+1. Add live action-level combat bindings or a live adapter around equivalent
+   `sts_lightspeed` internals. This is the current blocker for moving from
+   local fixtures to real simulator combat decisions.
+2. Connect the existing local combat contracts to the live binding without
+   changing their fixture behavior.
+3. Extend deterministic serialization and cloning tests to cover live
+   `sts_lightspeed` combat states.
+4. Run the existing beam-search combat player against live fixed-seed combats.
+5. Compare live combat-only metrics against `sts_lightspeed.Agent`.
+6. Save live planner trajectories for model training.
+7. Train or tune the value function as the live planner leaf evaluator.
+8. Train or tune the policy model for action pruning and low-budget decisions.
+9. Iterate on the hybrid policy with regression seed tracking.
