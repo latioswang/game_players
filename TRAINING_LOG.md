@@ -2,6 +2,41 @@
 
 This file records training observations, command changes, and experiment results so we can distinguish real learning effects from mixed-run chart artifacts.
 
+## 2026-05-26 07:50 CST
+
+### Parallel Expectimax Evaluation
+
+Goal: use the Apple M3 CPU hardware more effectively. The machine has 8 CPU cores and Numba reports 8 available threads with the `workqueue` threading layer.
+
+Code changes:
+
+- Added `eval --workers`, accepting a positive integer or `auto`.
+- Changed evaluation to generate one deterministic seed per game, so single-worker and multi-worker runs evaluate the same games.
+- Parallelized independent games with a thread pool. The hot recursive Expectimax functions are Numba-compiled with `nogil=True`, allowing game searches to run concurrently.
+- Set `--workers auto` as the default for `eval`; use `--workers 1` for single-worker baselines.
+
+Validation:
+
+```bash
+venv/bin/pytest -q
+```
+
+Result: `11 passed in 1.79s`.
+
+Benchmark:
+
+```bash
+venv/bin/python -m game_players.cli eval --games 100 --seed 1 --depth 2 --workers 1
+venv/bin/python -m game_players.cli eval --games 100 --seed 1 --depth 2 --workers auto
+```
+
+| Workers | Games | Depth | Avg Score | Best Score | Best Tile | Tile Counts | Wins 2048 | Win Rate | Avg Moves | Total Seconds | Avg Seconds/Game |
+|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| 1 | 100 | 2 | 24492.2 | 81244 | 4096 | `256:3,512:18,1024:29,2048:39,4096:11` | 50 | 0.500 | 1289.2 | 37.201 | 0.372 |
+| 8 (`auto`) | 100 | 2 | 24492.2 | 81244 | 4096 | `256:3,512:18,1024:29,2048:39,4096:11` | 50 | 0.500 | 1289.2 | 8.535 | 0.085 |
+
+Speedup: `37.201 / 8.535 = 4.36x`. The score rows match exactly, confirming worker count changes runtime without changing the evaluated game set.
+
 ## 2026-05-26 07:36 CST
 
 ### Fast Heuristic Expectimax Replacement

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+import os
 import random
 import time
 from typing import Iterable
@@ -74,12 +76,32 @@ def validate_depth(depth: int) -> None:
         raise ValueError(f"depth must be between 1 and {MAX_DEPTH}")
 
 
-def evaluate_games(agent: ExpectimaxAgent, games: int, seed: int) -> EvaluationSummary:
-    rng = random.Random(seed)
+def evaluate_games(agent: ExpectimaxAgent, games: int, seed: int, workers: int = 1) -> EvaluationSummary:
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
+    game_seeds = _game_seeds(games, seed)
     start = time.monotonic()
-    results = [agent.play_episode(rng) for _ in range(games)]
+    if workers == 1:
+        results = [_play_seed(agent.depth, game_seed) for game_seed in game_seeds]
+    else:
+        worker_count = min(workers, games)
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            results = list(executor.map(lambda game_seed: _play_seed(agent.depth, game_seed), game_seeds))
     total_seconds = time.monotonic() - start
     return summarize_results(results, total_seconds)
+
+
+def auto_worker_count() -> int:
+    return os.cpu_count() or 1
+
+
+def _game_seeds(games: int, seed: int) -> list[int]:
+    rng = random.Random(seed)
+    return [rng.randrange(0, 2**63) for _ in range(games)]
+
+
+def _play_seed(depth: int, seed: int) -> GameResult:
+    return ExpectimaxAgent(depth).play_episode(random.Random(seed))
 
 
 def summarize_results(results: Iterable[GameResult], total_seconds: float = 0.0) -> EvaluationSummary:
@@ -241,19 +263,19 @@ SNAKE_WEIGHTS = np.array(
 )
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _get_tile(board: int, index: int) -> int:
     return int((np.uint64(board) >> (index * 4)) & TILE_MASK)
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _set_tile(board: np.uint64, index: int, value: int) -> np.uint64:
     shift = index * 4
     clear_mask = FULL_MASK ^ (TILE_MASK << shift)
     return (board & clear_mask) | (np.uint64(value) << shift)
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def move_packed(board: int, action: int) -> tuple[np.uint64, int]:
     source = np.uint64(board)
     result = np.uint64(0)
@@ -295,7 +317,7 @@ def move_packed(board: int, action: int) -> tuple[np.uint64, int]:
     return source, 0
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def heuristic_score(board: int) -> float:
     empty_count = 0
     max_exp = 0
@@ -360,7 +382,7 @@ def heuristic_score(board: int) -> float:
     )
 
 
-@njit
+@njit(nogil=True)
 def choose_action_numba(board: np.uint64, depth: int) -> int:
     best_action = -1
     best_value = -1.0e30
@@ -375,7 +397,7 @@ def choose_action_numba(board: np.uint64, depth: int) -> int:
     return best_action
 
 
-@njit
+@njit(nogil=True)
 def _expectimax_value(board: np.uint64, depth: int, is_chance: bool) -> float:
     if is_chance:
         empty_count = 0

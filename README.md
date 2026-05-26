@@ -22,6 +22,13 @@ Evaluate the player over many games:
 python -m game_players.cli eval --games 100 --seed 1 --depth 2
 ```
 
+Evaluation uses all CPU cores by default. Pin the run to one worker when you
+need a single-threaded baseline:
+
+```bash
+python -m game_players.cli eval --games 100 --seed 1 --depth 2 --workers 1
+```
+
 Run one game and print the final board:
 
 ```bash
@@ -54,6 +61,10 @@ Evaluation reports:
 - `avg_moves`
 - `avg_seconds_per_game`
 - `total_seconds`
+
+The `--workers` option accepts a positive integer or `auto`. Parallel runs use
+one deterministic seed per game, so changing worker count changes runtime
+without changing the evaluated games.
 
 ## Files
 
