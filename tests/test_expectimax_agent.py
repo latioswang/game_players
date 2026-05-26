@@ -29,6 +29,34 @@ def test_row_transition_table_matches_reference_moves():
         assert actual_reward == expected_reward
 
 
+def test_expectimax_uses_reference_rules_for_high_tile_merge():
+    board = (
+        15, 15, 15, 15,
+        14, 13, 12, 11,
+        10, 9, 8, 7,
+        6, 5, 4, 3,
+    )
+
+    action = ExpectimaxAgent(depth=1).choose_action(board)
+
+    assert action in (LEFT, RIGHT)
+    after, reward = move(board, action)
+    assert 16 in after
+    assert reward == 131072
+
+
+def test_packed_move_rejects_unrepresentable_high_tile_merge():
+    board = (
+        15, 15, 0, 0,
+        0, 0, 0, 0,
+        0, 0, 0, 0,
+        0, 0, 0, 0,
+    )
+
+    with pytest.raises(ValueError, match="tile exponents above 15"):
+        move_packed(pack_board(board), LEFT)
+
+
 def test_spawn_probabilities_sum_to_one():
     board = (
         1, 1, 1, 1,

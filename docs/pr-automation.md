@@ -1,12 +1,12 @@
 # Pull request automation
 
-This repository has repo-side wiring for CI, Codex review/autofix, Slack traces, and Linear traces. A few account-level integrations still need to be enabled outside git.
+This repository has repo-side wiring for CI, Codex autofix, Slack traces, and Linear traces. Native Codex review is configured outside git.
 
 ## What is configured in this repo
 
 - `.github/workflows/ci.yml` runs `pytest` on pushes and pull requests.
-- `.github/workflows/codex-pr-review.yml` runs `openai/codex-action@v1` on every non-draft PR and posts Codex feedback as a PR comment.
-- `.github/workflows/codex-pr-autofix.yml` lets trusted users comment `/codex fix`, run a manual workflow, or opt into automatic review-triggered fixes.
+- Native Codex review is the single PR review path. Configure it in Codex cloud settings instead of also running a repo-side review workflow.
+- `.github/workflows/codex-pr-autofix.yml` automatically fixes Codex-authored review feedback, lets trusted users comment `/codex fix`, and supports manual workflow runs.
 - `.github/workflows/pr-traces.yml` posts pull request lifecycle traces to Slack and Linear when the required secrets are present.
 - `AGENTS.md` tells Codex how to install, test, and review this repository.
 
@@ -20,7 +20,7 @@ Add these in GitHub under Settings > Secrets and variables > Actions:
 
 Optional repository variables:
 
-- `CODEX_AUTOFIX_ON_REVIEW=true`: lets `.github/workflows/codex-pr-autofix.yml` attempt a fix after a submitted PR review. Leave this unset until the review loop is behaving well.
+- `CODEX_AUTOFIX_ON_REVIEW=true`: also lets `.github/workflows/codex-pr-autofix.yml` attempt a fix after non-Codex PR review submissions. Codex-authored review feedback, `/codex fix`, and manual workflow dispatch do not require this variable.
 
 ## Native Codex setup
 

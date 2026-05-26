@@ -42,6 +42,12 @@ jobs:
             let prNumber = null;
             let shouldRun = false;
             let reason = "";
+            const codexActors = new Set(["chatgpt-codex-connector", "github-actions[bot]"]);
+            const isCodexAuthored = (user) => codexActors.has(user?.login || "");
+            const hasCodexReviewMarker = (body) =>
+              body.includes("<!-- codex-pr-review -->") ||
+              body.includes("Codex PR review") ||
+              body.includes("### 💡 Codex Review");
 
             if (context.eventName === "workflow_dispatch") {
               prNumber = Number(core.getInput("pr_number"));
@@ -52,6 +58,10 @@ jobs:
               const body = context.payload.comment?.body || "";
               prNumber = issue?.number;
               const requestedFix = Boolean(issue?.pull_request) && /(^|\n)\/codex fix\b/i.test(body);
+              const codexReviewComment =
+                Boolean(issue?.pull_request) &&
+                isCodexAuthored(context.payload.comment?.user) &&
+                hasCodexReviewMarker(body);
               if (requestedFix) {
                 const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
                   owner: context.repo.owner,
@@ -65,15 +75,23 @@ jobs:
                   return;
                 }
               }
-              shouldRun = requestedFix;
-              reason = "PR comment requested /codex fix";
+              shouldRun = requestedFix || codexReviewComment;
+              reason = requestedFix
+                ? "PR comment requested /codex fix"
+                : "Codex review comment requested autofix";
             } else if (context.eventName === "pull_request_review") {
               const reviewState = (context.payload.review?.state || "").toLowerCase();
+              const reviewBody = context.payload.review?.body || "";
+              const codexReview =
+                isCodexAuthored(context.payload.review?.user) &&
+                hasCodexReviewMarker(reviewBody);
               prNumber = context.payload.pull_request?.number;
               shouldRun =
-                process.env.CODEX_AUTOFIX_ON_REVIEW === "true" &&
-                ["changes_requested", "commented"].includes(reviewState);
-              reason = "CODEX_AUTOFIX_ON_REVIEW handled PR review";
+                ["changes_requested", "commented"].includes(reviewState) &&
+                (codexReview || process.env.CODEX_AUTOFIX_ON_REVIEW === "true");
+              reason = codexReview
+                ? "Codex PR review requested autofix"
+                : "CODEX_AUTOFIX_ON_REVIEW handled PR review";
             }
 
             if (!prNumber || !shouldRun) {
@@ -90,10 +108,30 @@ jobs:
             });
 
             const sameRepo = pr.head.repo.full_name === `${owner}/${repo}`;
-            const canRun = sameRepo && !pr.draft;
+            let headBranchExists = false;
+            if (sameRepo && pr.state === "open") {
+              try {
+                await github.rest.git.getRef({
+                  owner,
+                  repo,
+                  ref: `heads/${pr.head.ref}`,
+                });
+                headBranchExists = true;
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+            const canRun = pr.state === "open" && sameRepo && headBranchExists && !pr.draft;
 
             core.setOutput("should_run", String(canRun));
-            core.setOutput("skip_reason", canRun ? "" : "Autofix only runs on non-draft same-repository PR branches.");
+            core.setOutput(
+              "skip_reason",
+              canRun
+                ? ""
+                : "Autofix only runs on open, non-draft PRs with an existing same-repository head branch.",
+            );
             core.setOutput("reason", reason);
             core.setOutput("number", String(pr.number));
             core.setOutput("base_ref", pr.base.ref);
@@ -177,12 +215,12 @@ jobs:
         if: ${{ steps.pr.outputs.should_run == 'true' && env.OPENAI_API_KEY != '' }}
         uses: actions/checkout@v5
         with:
-          ref: ${{ steps.pr.outputs.head_ref }}
+          ref: refs/heads/${{ steps.pr.outputs.head_ref }}
           fetch-depth: 0
 
       - name: Fetch base branch
         if: ${{ steps.pr.outputs.should_run == 'true' && env.OPENAI_API_KEY != '' }}
-        run: git fetch --no-tags origin ${{ steps.pr.outputs.base_ref }}
+        run: git fetch --no-tags origin refs/heads/${{ steps.pr.outputs.base_ref }}:refs/remotes/origin/${{ steps.pr.outputs.base_ref }}
 
       - name: Run Codex autofix
         if: ${{ steps.pr.outputs.should_run == 'true' && env.OPENAI_API_KEY != '' }}
@@ -218,4 +256,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Apply Codex PR fixes"
-          git push origin HEAD:${{ steps.pr.outputs.head_ref }}
+          git push origin HEAD:refs/heads/${{ steps.pr.outputs.head_ref }}

@@ -73,7 +73,7 @@ def play_game(args: argparse.Namespace) -> None:
     log.info("score=%s", result.score)
     log.info("max_tile=%s", result.max_tile)
     log.info("moves=%s", result.moves)
-    log.info("next_action=%s", action_name(agent.choose_action(_pack_for_next_action(result.board))))
+    log.info("next_action=%s", action_name(agent.choose_action(result.board)))
     if args.show_board:
         log.info("final_board:\n%s", render(result.board))
 
@@ -99,13 +99,6 @@ def _resolve_workers(value: str) -> int:
 
 def _format_tile_counts(tile_counts: dict[int, int]) -> str:
     return ",".join(f"{tile}:{count}" for tile, count in sorted(tile_counts.items()))
-
-
-def _pack_for_next_action(board):
-    from .expectimax_agent import pack_board
-
-    return pack_board(board)
-
 
 if __name__ == "__main__":
     main()
