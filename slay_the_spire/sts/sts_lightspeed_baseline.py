@@ -311,8 +311,8 @@ def choose_reward(gc: Any, rewards: list[Any], deck_policy: str) -> tuple[Any | 
 
 
 def score_card_reward(gc: Any, card: Any) -> float:
-    name = card_name(card)
-    deck = [card_name(deck_card) for deck_card in gc.deck]
+    name = card_base_name(card)
+    deck = [card_base_name(deck_card) for deck_card in gc.deck]
     deck_size = len(deck)
     attack_count = count_cards_by_type(gc.deck, "ATTACK")
     skill_count = count_cards_by_type(gc.deck, "SKILL")
@@ -390,7 +390,28 @@ def enum_name(value: Any) -> str:
 
 
 def card_name(card: Any) -> str:
+    base_name = card_base_name(card)
+    upgrade_count = card_upgrade_count(card)
+    if upgrade_count <= 0:
+        return base_name
+    if upgrade_count == 1:
+        return f"{base_name}+"
+    return f"{base_name}+{upgrade_count}"
+
+
+def card_base_name(card: Any) -> str:
     return enum_name(card.id)
+
+
+def card_upgrade_count(card: Any) -> int:
+    raw_count = getattr(card, "upgrade_count", 0)
+    try:
+        count = int(raw_count)
+    except (TypeError, ValueError):
+        count = 0
+    if count > 0:
+        return count
+    return int(bool(getattr(card, "upgraded", False)))
 
 
 def print_summary(results: list[TrialResult]) -> None:

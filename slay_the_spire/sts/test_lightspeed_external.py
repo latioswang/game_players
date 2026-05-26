@@ -1,11 +1,28 @@
 from __future__ import annotations
 
 import os
+from enum import Enum
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from sts_lightspeed_baseline import import_sts, run_trial
+from sts_lightspeed_baseline import card_name, import_sts, run_trial
+
+
+class FakeCardId(Enum):
+    BASH = 1
+
+
+def test_card_name_preserves_upgrade_state() -> None:
+    assert (
+        card_name(SimpleNamespace(id=FakeCardId.BASH, upgraded=False, upgrade_count=0)) == "BASH"
+    )
+    assert card_name(SimpleNamespace(id=FakeCardId.BASH, upgraded=True, upgrade_count=1)) == "BASH+"
+    assert (
+        card_name(SimpleNamespace(id=FakeCardId.BASH, upgraded=True, upgrade_count=2)) == "BASH+2"
+    )
+    assert card_name(SimpleNamespace(id=FakeCardId.BASH, upgraded=True)) == "BASH+"
 
 
 def test_lightspeed_external_trial_from_env() -> None:
@@ -27,4 +44,3 @@ def test_lightspeed_external_trial_from_env() -> None:
     assert result.outcome in {"PLAYER_LOSS", "PLAYER_VICTORY"}
     assert result.floor >= 0
     assert result.deck
-
