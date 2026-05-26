@@ -454,9 +454,9 @@ def _action_metadata(payload: Mapping[str, Any]) -> dict[str, JsonValue]:
 
 def _live_identity_matches(selected: CombatAction, current: CombatAction) -> bool:
     selected_identity = _live_identity(selected)
-    if not selected_identity:
-        return True
     current_identity = _live_identity(current)
+    if not selected_identity or not current_identity:
+        return False
     return all(current_identity.get(key) == value for key, value in selected_identity.items())
 
 

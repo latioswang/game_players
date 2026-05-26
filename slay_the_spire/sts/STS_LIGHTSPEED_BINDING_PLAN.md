@@ -65,7 +65,8 @@ payload, and expose the existing `CombatBackend` protocol:
 - `apply(action)` re-enumerates current legal payloads, matches the selected
   action by stable `CombatAction.action_key()` plus freshness metadata such as
   `binding_action_id` and `decision_id`, rejects stale ids, and forwards the
-  current full payload to the handle
+  current full payload to the handle. Payloads without freshness metadata are
+  rejected instead of falling back to reusable stable keys.
 - `clone()` wraps `CombatHandle.clone()` and preserves deterministic state
 - `advance_to_player_decision()`, `is_terminal()`, and `metrics()` forward to
   the handle and normalize the result into local combat types

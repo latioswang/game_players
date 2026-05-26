@@ -189,7 +189,7 @@ Current Recommended Sequence increment:
    contract without changing fixture behavior, re-enumerates current legal
    payloads at apply time, validates live freshness metadata such as
    `binding_action_id` and `decision_id`, and rejects stale action keys
-   explicitly.
+   explicitly. Missing freshness metadata is treated as an unsafe live payload.
 2. Payload adapter acceptance is covered by fake-handle tests for card/target,
    end-turn, metrics, clone independence, search-facing simulator wrapping, and
    stale action rejection, including reused stable keys such as `end_turn`.

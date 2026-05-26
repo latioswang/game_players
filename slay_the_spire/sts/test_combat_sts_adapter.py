@@ -270,6 +270,17 @@ def test_apply_rejects_reused_stable_key_from_previous_decision() -> None:
     assert handle.applied_commands == ["end"]
 
 
+def test_apply_rejects_live_actions_without_freshness_metadata() -> None:
+    handle = NoFreshnessCombatHandle()
+    adapter = StsLightspeedCombatAdapter(handle)
+    _, end_turn = adapter.legal_actions()
+
+    with pytest.raises(StaleCombatAction, match="end_turn"):
+        adapter.apply(end_turn)
+
+    assert handle.applied_commands == []
+
+
 def test_backend_simulator_wraps_live_backend_for_search_callers() -> None:
     backend = StsLightspeedCombatAdapter(FakeCombatHandle())
     simulator = CombatBackendSimulator()
@@ -361,3 +372,26 @@ class TerminalAfterStrikeHandle(FakeCombatHandle):
 class AdvancingCombatHandle(FakeCombatHandle):
     def advance_to_player_decision(self) -> None:
         self.turn += 1
+
+
+class NoFreshnessCombatHandle(FakeCombatHandle):
+    def legal_actions(self) -> list[dict[str, Any]]:
+        return [
+            {
+                key: value
+                for key, value in action.items()
+                if key not in {"binding_action_id", "decision_id"}
+            }
+            for action in super().legal_actions()
+        ]
+
+    def _resolve_action(self, action: dict[str, Any] | str) -> dict[str, Any]:
+        if isinstance(action, str):
+            return super()._resolve_action(action)
+        for legal_action in self.legal_actions():
+            if (
+                legal_action.get("stable_id") == action.get("stable_id")
+                and legal_action.get("command") == action.get("command")
+            ):
+                return legal_action
+        raise AssertionError(f"fake binding received stale action payload: {action}")
