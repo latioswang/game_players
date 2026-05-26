@@ -54,6 +54,33 @@ The returned payloads should map cleanly to `combat_api.py`:
 - legal action payloads map to `CombatAction`
 - terminal and per-step metrics map to `CombatMetrics` and `ActionOutcome`
 
+## Local Payload Adapter Path
+
+Keep the pybind surface dictionary-based and add the local conformance layer in
+this repository. The adapter should wrap a live `CombatHandle`, validate each
+payload, and expose the existing `CombatBackend` protocol:
+
+- `observe()` converts the live snapshot into `CombatObservation`
+- `legal_actions()` converts stable live action payloads into `CombatAction`
+- `apply(action)` re-enumerates current legal payloads, matches the selected
+  action by stable `CombatAction.action_key()` plus freshness metadata such as
+  `binding_action_id` and `decision_id`, rejects stale ids, and forwards the
+  current full payload to the handle. Payloads without freshness metadata are
+  rejected instead of falling back to reusable stable keys.
+- `clone()` wraps `CombatHandle.clone()` and preserves deterministic state
+- `advance_to_player_decision()`, `is_terminal()`, and `metrics()` forward to
+  the handle and normalize the result into local combat types
+- `CombatBackendSimulator` wraps the stateful backend for search callers and
+  computes per-action metric deltas from before/after backend metrics. Wrapped
+  states snapshot terminal status so historical outcomes are not affected by
+  later backend mutations, and simulator operations clone before mutating so
+  input states remain reusable search/history nodes.
+
+This keeps search, value models, trajectories, and evaluation coupled only to
+`CombatBackend`, while the adapter owns all pybind payload drift and validation.
+The conformance tests should use fixed seeds and run only when
+`STS_LIGHTSPEED_MODULE_DIR` points at a compiled `slaythespire` module.
+
 ## Legal Action Encoding
 
 Use action payloads with both a stable search id and the current upstream
@@ -74,7 +101,9 @@ Core stable ids:
 
 The binding should expose both a stable id and the original simulator command
 string accepted by `BattleSimulator::takeAction`. Search can use the stable id;
-the adapter can apply the command string.
+the adapter stores command/index metadata for auditability but applies the
+freshly matched current payload, avoiding stale hand or potion indexes from an
+older decision.
 
 Card-select actions need task metadata, not just a hand card id. Some upstream
 choices refer to hand, discard pile, exhaust pile, draw pile, generated Codex or
@@ -107,8 +136,9 @@ The minimum useful `observe()` payload:
 1. Add upstream pybind smoke tests that initialize a one-combat Ironclad state,
    call `observe`, enumerate actions, clone, apply `end_turn`, and verify the
    original clone is unchanged.
-2. Add local adapter tests behind `STS_LIGHTSPEED_MODULE_DIR` that convert the
-   upstream payloads into `combat_api.CombatState` and `CombatAction`.
+2. Add local payload-adapter conformance tests behind `STS_LIGHTSPEED_MODULE_DIR`
+   that convert upstream payloads into `CombatObservation`, `CombatAction`, and
+   `CombatMetrics`, and assert the wrapper satisfies `CombatBackend`.
 3. Run the existing `CombatFixtureSimulator` tests unchanged to preserve local
    determinism.
 4. Run fixed-seed live comparisons with `combat_experiment.py` once live
