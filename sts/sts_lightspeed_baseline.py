@@ -343,23 +343,29 @@ def card_name(card: Any) -> str:
 
 
 def print_summary(results: list[TrialResult]) -> None:
+    for line in summarize_results(results):
+        print(line)
+
+
+def summarize_results(results: list[TrialResult]) -> list[str]:
     if not results:
-        print("No trials ran.")
-        return
+        return ["No trials ran."]
     wins = sum(result.won for result in results)
     floors = [result.floor for result in results]
     hp_values = [result.hp for result in results]
     picks = [len(result.cards_picked) for result in results]
     skips = [result.cards_skipped for result in results]
-    print(f"games={len(results)}")
-    print(f"wins={wins}")
-    print(f"win_rate={wins / len(results):.3f}")
-    print(f"avg_floor={statistics.fmean(floors):.2f}")
-    print(f"best_floor={max(floors)}")
-    print(f"avg_final_hp={statistics.fmean(hp_values):.2f}")
-    print(f"avg_cards_picked={statistics.fmean(picks):.2f}")
-    print(f"avg_card_rewards_skipped={statistics.fmean(skips):.2f}")
-    print("outcomes=" + json.dumps(count_by(result.outcome for result in results), sort_keys=True))
+    return [
+        f"games={len(results)}",
+        f"wins={wins}",
+        f"win_rate={wins / len(results):.3f}",
+        f"avg_floor={statistics.fmean(floors):.2f}",
+        f"best_floor={max(floors)}",
+        f"avg_final_hp={statistics.fmean(hp_values):.2f}",
+        f"avg_cards_picked={statistics.fmean(picks):.2f}",
+        f"avg_card_rewards_skipped={statistics.fmean(skips):.2f}",
+        "outcomes=" + json.dumps(count_by(result.outcome for result in results), sort_keys=True),
+    ]
 
 
 def write_jsonl(path: Path, results: list[TrialResult]) -> None:

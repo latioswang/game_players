@@ -78,7 +78,25 @@ decisions for later analysis.
 
 ## Basic Baseline Strategy Tests
 
-Run a tiny deterministic smoke comparison before larger experiments:
+Run the simulator smoke test before larger experiments:
+
+```bash
+/usr/bin/python3 sts/smoke_test_sts_lightspeed.py \
+  --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
+  --games 5 \
+  --start-seed 1 \
+  --simulation-count 1
+```
+
+This script actually imports the compiled `slaythespire` extension, performs a
+direct simulator playout, then runs three baseline strategy paths:
+
+- `agent`: one call into the upstream `sts_lightspeed` agent.
+- `skip`: Python pauses at card rewards and skips them.
+- `heuristic`: Python pauses at card rewards, scores the choices, and records
+  every decision.
+
+You can also run the strategy commands individually:
 
 ```bash
 /usr/bin/python3 sts/sts_lightspeed_baseline.py \
@@ -103,13 +121,6 @@ Run a tiny deterministic smoke comparison before larger experiments:
   --deck-policy heuristic \
   --show-trials
 ```
-
-These commands exercise three different strategy paths:
-
-- `agent`: one call into the upstream `sts_lightspeed` agent.
-- `skip`: Python pauses at card rewards and skips them.
-- `heuristic`: Python pauses at card rewards, scores the choices, and records
-  every decision.
 
 For the `heuristic --show-trials` smoke test, the output should include a
 summary followed by JSON rows containing `reward_options`, `picked`, final
