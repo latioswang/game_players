@@ -15,6 +15,7 @@ upstream bundled pybind11; Python 3.12 did not.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass, asdict
 import json
 from pathlib import Path
@@ -205,7 +206,9 @@ def run_trial(
     cards_skipped = 0
 
     if deck_policy == "agent":
+        initial_deck = [card_name(card) for card in gc.deck]
         agent.playout(gc)
+        cards_picked = deck_additions(initial_deck, [card_name(card) for card in gc.deck])
     else:
         while gc.outcome == sts.GameOutcome.UNDECIDED:
             if len(decisions) >= max_decisions:
@@ -332,6 +335,15 @@ def skip_score_threshold(gc: Any) -> float:
 
 def count_cards_by_type(cards: Iterable[Any], type_name: str) -> int:
     return sum(1 for card in cards if enum_name(card.type) == type_name)
+
+
+def deck_additions(before: list[str], after: list[str]) -> list[str]:
+    before_counts = Counter(before)
+    after_counts = Counter(after)
+    added: list[str] = []
+    for card_name_value in sorted(after_counts):
+        added.extend([card_name_value] * max(0, after_counts[card_name_value] - before_counts[card_name_value]))
+    return added
 
 
 def state_key(gc: Any) -> tuple[str, int, str, int, int]:

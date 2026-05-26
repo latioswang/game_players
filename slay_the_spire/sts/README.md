@@ -81,7 +81,7 @@ decisions for later analysis.
 Run the simulator smoke test before larger experiments:
 
 ```bash
-/usr/bin/python3 slay_the_spire/sts/smoke_test_sts_lightspeed.py \
+/usr/bin/python3 slay_the_spire/sts/test_sts_lightspeed_smoke.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 5 \
   --start-seed 1 \
@@ -97,6 +97,16 @@ direct simulator playout, then runs three baseline strategy paths:
   every decision.
 
 You can also run the strategy commands individually:
+
+The same smoke test can also be collected by `pytest`; it is skipped unless the
+external simulator module path is provided. Use the same Python interpreter that
+was used to build the `slaythespire` extension when running the full external
+simulator test through pytest:
+
+```bash
+STS_LIGHTSPEED_MODULE_DIR=/tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
+python -m pytest slay_the_spire/sts/test_sts_lightspeed_smoke.py -q
+```
 
 ```bash
 /usr/bin/python3 slay_the_spire/sts/sts_lightspeed_baseline.py \
@@ -132,9 +142,9 @@ All runs used seeds `1..100`, ascension `0`.
 
 | Policy | Simulation Count | Games | Wins | Avg Floor | Best Floor | Avg Picked | Avg Skipped |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `agent` | 1 | 100 | 0 | 5.55 | 16 | n/a | n/a |
+| `agent` | 1 | 100 | 0 | 5.55 | 16 | 3.20 | 0.00 |
 | `heuristic` | 1 | 100 | 0 | 5.90 | 16 | 3.13 | 0.01 |
-| `agent` | 5 | 100 | 0 | 9.75 | 19 | n/a | n/a |
+| `agent` | 5 | 100 | 0 | 9.75 | 19 | 4.80 | 0.00 |
 | `heuristic` | 5 | 100 | 0 | 9.29 | 21 | 5.03 | 0.06 |
 
 Interpretation:

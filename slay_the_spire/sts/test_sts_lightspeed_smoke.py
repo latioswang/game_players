@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from sts_lightspeed_baseline import import_sts, run_trial, summarize_results
@@ -38,6 +39,8 @@ def main() -> None:
         ]
         assert len(results) == args.games
         assert all(result.outcome in {"PLAYER_LOSS", "PLAYER_VICTORY"} for result in results)
+        if policy == "agent":
+            assert any(result.cards_picked for result in results)
         if policy == "skip":
             assert all(not result.cards_picked for result in results)
         if policy == "heuristic":
@@ -67,6 +70,28 @@ def run_direct_simulator_smoke(sts: object) -> None:
     print(f"deck_size={len(gc.deck)}")
 
 
+def test_sts_lightspeed_smoke_from_env() -> None:
+    module_dir = os.environ.get("STS_LIGHTSPEED_MODULE_DIR")
+    if not module_dir:
+        import pytest
+
+        pytest.skip("set STS_LIGHTSPEED_MODULE_DIR to run external sts_lightspeed smoke test")
+
+    sts = import_sts(Path(module_dir))
+    run_direct_simulator_smoke(sts)
+    result = run_trial(
+        sts=sts,
+        seed=1,
+        ascension=0,
+        simulation_count=1,
+        boss_multiplier=1.0,
+        deck_policy="heuristic",
+        max_decisions=500,
+    )
+    assert result.outcome in {"PLAYER_LOSS", "PLAYER_VICTORY"}
+    assert result.floor >= 0
+    assert result.deck
+
+
 if __name__ == "__main__":
     main()
-
