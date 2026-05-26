@@ -173,24 +173,56 @@ Current checkpoint:
   beam-search planning over abstract combat simulators, JSONL trajectory
   records, handcrafted value scoring, linear value-function training,
   policy action priors, hybrid policy orchestration, fixed-seed fixture
-  experiments, regression tracking, and combat metric aggregation.
+  experiments, regression tracking, combat metric aggregation, a dict-payload
+  `sts_lightspeed` combat adapter, a `CombatBackendSimulator` bridge for search
+  callers, fake-handle adapter tests, and env-gated live conformance smoke
+  tests.
 - Not completed live: the Python `sts_lightspeed` binding still does not
   expose combat legal-action enumeration, single-action application,
   action-level combat pause/resume, cheap live combat cloning, or live
   combat-only outcome metrics.
 
-Next checkpoint:
+Current Recommended Sequence increment:
 
-1. Add live action-level combat bindings or a live adapter around equivalent
-   `sts_lightspeed` internals. This is the current blocker for moving from
-   local fixtures to real simulator combat decisions.
-2. Connect the existing local combat contracts to the live binding without
-   changing their fixture behavior.
-3. Extend deterministic serialization and cloning tests to cover live
-   `sts_lightspeed` combat states.
-4. Run the existing beam-search combat player against live fixed-seed combats.
-5. Compare live combat-only metrics against `sts_lightspeed.Agent`.
-6. Save live planner trajectories for model training.
-7. Train or tune the value function as the live planner leaf evaluator.
-8. Train or tune the policy model for action pruning and low-budget decisions.
-9. Iterate on the hybrid policy with regression seed tracking.
+1. The local payload adapter boundary is implemented. It consumes stable
+   `sts_lightspeed` legal-action payloads, emits the existing combat action
+   contract without changing fixture behavior, re-enumerates current legal
+   payloads at apply time, validates live freshness metadata such as
+   `binding_action_id` and `decision_id`, and rejects stale action keys
+   explicitly.
+2. Payload adapter acceptance is covered by fake-handle tests for card/target,
+   end-turn, metrics, clone independence, search-facing simulator wrapping, and
+   stale action rejection, including reused stable keys such as `end_turn`.
+   Potion, potion-discard, and card-select payloads remain
+   binding-conformance cases once upstream emits real examples.
+3. Add the upstream live-binding bridge behind the adapter. It should pause a fixed-seed
+   combat at each player decision, enumerate payload-backed legal actions,
+   apply exactly one selected action, refresh the combat snapshot, and return
+   combat metrics such as HP loss, turns, potion use, survival, and terminal
+   outcome. The local simulator bridge computes per-action deltas from
+   before/after backend metrics.
+4. Accept the live-binding bridge only when a deterministic smoke combat can
+   execute several player decisions through the bridge while preserving legal
+   action identity, selected action application, state refresh, and metric
+   accounting.
+5. Extend deterministic serialization and cloning coverage to live
+   `sts_lightspeed` combat states once upstream exposes either cheap cloning or
+   deterministic replay support.
+6. Run the existing beam-search combat player against live fixed-seed combats.
+7. Compare live combat-only metrics against `sts_lightspeed.Agent`.
+8. Save live planner trajectories for model training.
+9. Train or tune the value function as the live planner leaf evaluator.
+10. Train or tune the policy model for action pruning and low-budget decisions.
+11. Iterate on the hybrid policy with regression seed tracking.
+
+Remaining upstream binding work:
+
+- expose stable legal-action payloads with command type, card index, target
+  index, potion index, card-select metadata, and discard metadata
+- expose a pybind operation that applies one combat action and returns the
+  updated combat snapshot or a resumable decision handle
+- preserve action-level pause/resume across normal hand actions, card-select
+  tasks, potion usage, potion discard, monster turns, and combat completion
+- provide cheap live combat cloning or deterministic replay suitable for search
+- surface combat-only outcome, turn, HP-loss, resource-use, and terminal-state
+  metrics without relying on full-run aggregate stats

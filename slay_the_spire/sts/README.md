@@ -115,8 +115,21 @@ Recommended Sequence checkpoint:
   single-action application, action-level combat pause/resume, cheap live state
   cloning, and combat-only outcome reporting are not exposed by the current
   Python binding.
-- Next work item: implement the live action-binding adapter, then run the
-  already-built planner and model helpers against fixed-seed simulator combats.
+- Added the local payload adapter in `combat_sts_adapter.py`. It converts
+  future pybind `CombatHandle.observe()`, `legal_actions()`, `apply()`,
+  `clone()`, and `metrics()` dictionaries into the existing `CombatBackend`
+  protocol, and `CombatBackendSimulator` lets search/model callers use a live
+  backend through the existing simulator methods.
+- Next live work item: add the upstream pybind `CombatHandle` surface so the
+  adapter can run fixed-seed simulator combats instead of fake payload tests.
+
+Live conformance checks should stay environment-gated until the external module
+is available. Use `STS_LIGHTSPEED_MODULE_DIR` for pytest checks that import the
+compiled pybind module and skip cleanly while future combat entry points are
+absent. Set `STS_LIGHTSPEED_COMBAT_CONFORMANCE=1` to require those future entry
+points. Fake-handle tests cover payload conversion to
+`CombatObservation`/`CombatAction`/`CombatMetrics`, clone independence, and
+stale-action rejection until upstream exposes real combat payloads.
 
 Run the local combat tests from the repository root:
 

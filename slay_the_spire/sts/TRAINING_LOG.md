@@ -39,8 +39,9 @@
 - Current blocker: live `sts_lightspeed` action bindings still do not expose
   legal combat actions, single-action application, action-level combat
   pause/resume, cheap live state cloning, or combat-only outcome metrics.
-- Next checkpoint: implement and validate the live action-binding adapter, then
-  run the existing planner/value/policy helpers against fixed-seed live combats.
+- Next checkpoint: add the upstream live combat `CombatHandle`, then run the
+  existing planner/value/policy helpers against fixed-seed live combats through
+  the validated local payload adapter.
 - Added deterministic local sequence-completion modules:
   `combat_fixture.py`, `combat_training.py`, `combat_hybrid.py`, and
   `combat_experiment.py`.
@@ -53,3 +54,19 @@
   outcomes must point to a next step, and the binding plan now specifies
   command/index resolution, card-select task metadata, potion discard actions,
   and adapter-owned metrics counters.
+- Implemented and logged the local payload adapter/live-binding bridge layer.
+  Acceptance now covers converting upstream-shaped legal-action payloads into
+  existing combat actions without changing fixture behavior, wrapping the
+  stateful backend for search callers, preserving terminal-state snapshots,
+  and rejecting stale action payloads with explicit adapter errors instead of
+  silent fallbacks.
+- Documented the live-binding bridge acceptance path: pause a fixed-seed
+  `sts_lightspeed` combat at each player decision, enumerate payload-backed
+  legal actions, apply exactly one selected action, refresh the combat snapshot,
+  preserve existing planner/value/policy contracts, and report live combat
+  metrics through backend counters normalized by the adapter.
+- Remaining upstream binding work: expose stable action payloads from
+  `sts_lightspeed`, add a pybind call for single combat action application,
+  preserve action-level pause/resume around card-select and potion-discard
+  tasks, provide cheap clone or deterministic replay support for search, and
+  surface combat-only outcome/turn/resource metrics.
