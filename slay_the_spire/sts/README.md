@@ -81,7 +81,7 @@ decisions for later analysis.
 Run the simulator smoke test before larger experiments:
 
 ```bash
-/usr/bin/python3 slay_the_spire/sts/test_sts_lightspeed_runner.py \
+/usr/bin/python3 slay_the_spire/sts/run_lightspeed_smoke.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 5 \
   --start-seed 1 \
@@ -105,7 +105,7 @@ simulator test through pytest:
 
 ```bash
 STS_LIGHTSPEED_MODULE_DIR=/tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
-python -m pytest slay_the_spire/sts/test_sts_lightspeed_runner.py -q
+python -m pytest slay_the_spire/sts/test_lightspeed_external.py -q
 ```
 
 ```bash
