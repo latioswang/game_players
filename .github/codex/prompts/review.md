@@ -7,6 +7,7 @@ Use the repository instructions in AGENTS.md. Inspect the PR diff against the ba
 In your final response:
 
 - Start with `Codex PR review`.
+- Put `Gate: fail` on the next line if you found any high-priority issue that should block merge. Put `Gate: pass` on the next line only when you found no high-priority blocking issues.
 - If you find issues, list each one with severity, file path, line or function, impact, and a concrete fix.
 - If you find no high-priority issues, say that directly.
 - Mention whether tests appear to cover the changed behavior.

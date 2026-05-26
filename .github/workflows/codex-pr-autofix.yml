@@ -42,12 +42,21 @@ jobs:
             let prNumber = null;
             let shouldRun = false;
             let reason = "";
+            let triggerReviewSha = null;
+            let requireFreshReviewSha = false;
             const codexActors = new Set(["chatgpt-codex-connector", "github-actions[bot]"]);
             const isCodexAuthored = (user) => codexActors.has(user?.login || "");
             const hasCodexReviewMarker = (body) =>
               body.includes("<!-- codex-pr-review -->") ||
+              body.includes("<!-- codex-pr-review:") ||
               body.includes("Codex PR review") ||
               body.includes("### 💡 Codex Review");
+            const hasBlockingCodexFinding = (body) =>
+              /^Gate:\s*fail\b/im.test(body) ||
+              /\bfound (?:one |[0-9]+ )?high-priority issue/i.test(body) ||
+              /\bhigh severity\b/i.test(body) ||
+              /\bseverity:\s*high\b/i.test(body) ||
+              /^-\s*\*\*High\b/im.test(body);
 
             if (context.eventName === "workflow_dispatch") {
               prNumber = Number(core.getInput("pr_number"));
@@ -58,10 +67,6 @@ jobs:
               const body = context.payload.comment?.body || "";
               prNumber = issue?.number;
               const requestedFix = Boolean(issue?.pull_request) && /(^|\n)\/codex fix\b/i.test(body);
-              const codexReviewComment =
-                Boolean(issue?.pull_request) &&
-                isCodexAuthored(context.payload.comment?.user) &&
-                hasCodexReviewMarker(body);
               if (requestedFix) {
                 const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
                   owner: context.repo.owner,
@@ -75,16 +80,17 @@ jobs:
                   return;
                 }
               }
-              shouldRun = requestedFix || codexReviewComment;
-              reason = requestedFix
-                ? "PR comment requested /codex fix"
-                : "Codex review comment requested autofix";
+              shouldRun = requestedFix;
+              reason = "PR comment requested /codex fix";
             } else if (context.eventName === "pull_request_review") {
               const reviewState = (context.payload.review?.state || "").toLowerCase();
               const reviewBody = context.payload.review?.body || "";
+              triggerReviewSha = context.payload.review?.commit_id || null;
               const codexReview =
                 isCodexAuthored(context.payload.review?.user) &&
-                hasCodexReviewMarker(reviewBody);
+                hasCodexReviewMarker(reviewBody) &&
+                hasBlockingCodexFinding(reviewBody);
+              requireFreshReviewSha = codexReview;
               prNumber = context.payload.pull_request?.number;
               shouldRun =
                 ["changes_requested", "commented"].includes(reviewState) &&
@@ -124,13 +130,17 @@ jobs:
               }
             }
             const canRun = pr.state === "open" && sameRepo && headBranchExists && !pr.draft;
+            const freshReview = !requireFreshReviewSha || triggerReviewSha === pr.head.sha;
+            const shouldAutofix = canRun && freshReview;
 
-            core.setOutput("should_run", String(canRun));
+            core.setOutput("should_run", String(shouldAutofix));
             core.setOutput(
               "skip_reason",
-              canRun
+              shouldAutofix
                 ? ""
-                : "Autofix only runs on open, non-draft PRs with an existing same-repository head branch.",
+                : !canRun
+                  ? "Autofix only runs on open, non-draft PRs with an existing same-repository head branch."
+                  : "Skipping stale Codex review feedback because it does not match the current PR head.",
             );
             core.setOutput("reason", reason);
             core.setOutput("number", String(pr.number));

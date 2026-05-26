@@ -1,12 +1,12 @@
 # Pull request automation
 
-This repository has repo-side wiring for CI, Codex autofix, Slack traces, and Linear traces. Native Codex review is configured outside git.
+This repository has repo-side wiring for CI, Codex review gating/autofix, Slack traces, and Linear traces. Native Codex review is configured outside git.
 
 ## What is configured in this repo
 
 - `.github/workflows/ci.yml` installs and tests the `2048` package from the repository root on pushes and pull requests.
-- Native Codex review is the single PR review path. Configure it in Codex cloud settings instead of also running a repo-side review workflow.
-- `.github/workflows/codex-pr-autofix.yml` automatically fixes Codex-authored review feedback, lets trusted users comment `/codex fix`, and supports manual workflow runs.
+- `.github/workflows/codex-pr-review.yml` runs `openai/codex-action@v1` on every non-draft PR, posts Codex feedback as a PR comment for the exact PR head, and marks the required `Codex review gate` status according to whether Codex found high-priority blocking issues.
+- `.github/workflows/codex-pr-autofix.yml` lets trusted users comment `/codex fix` and supports manual workflow runs for applying review feedback.
 - `.github/workflows/pr-traces.yml` posts pull request lifecycle traces to Slack and Linear when the required secrets are present.
 - `AGENTS.md` tells Codex how to install, test, and review this repository.
 
@@ -20,7 +20,7 @@ Add these in GitHub under Settings > Secrets and variables > Actions:
 
 Optional repository variables:
 
-- `CODEX_AUTOFIX_ON_REVIEW=true`: also lets `.github/workflows/codex-pr-autofix.yml` attempt a fix after non-Codex PR review submissions. Codex-authored review feedback, `/codex fix`, and manual workflow dispatch do not require this variable.
+- `CODEX_AUTOFIX_ON_REVIEW=true`: also lets `.github/workflows/codex-pr-autofix.yml` attempt a fix after PR review submissions. `/codex fix` and manual workflow dispatch do not require this variable.
 
 ## Native Codex setup
 
@@ -55,8 +55,8 @@ For reliable Linear tracing, include the issue ID in the branch name or PR title
 Protect `main` with:
 
 - Required status check: `Python tests`.
-- Require PR review before merge.
+- Required status check: `Codex review gate`.
 - Require branches to be up to date before merge.
-- Allow auto-merge only after CI and required reviews pass.
+- Allow auto-merge only after CI and the Codex review gate pass.
 
-Keep fully automatic merge disabled. Codex can review and prepare fixes, but a human should still own the final merge decision.
+Keep fully automatic merge disabled unless you explicitly want Codex to merge after checks pass.
