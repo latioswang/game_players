@@ -3,7 +3,7 @@
 The sts_lightspeed project is intentionally not vendored here. Build its
 Python module externally, then point this script at the build directory:
 
-    /usr/bin/python3 scripts/sts_lightspeed_baseline.py \
+    /usr/bin/python3 sts/sts_lightspeed_baseline.py \
       --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
       --games 20 --simulation-count 1 --deck-policy heuristic
 

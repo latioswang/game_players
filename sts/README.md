@@ -1,9 +1,9 @@
-# sts_lightspeed Baseline Runner
+# Slay-the-Spire Baseline Runner
 
-This worktree adds a thin Python runner for the external
-`gamerpuppy/sts_lightspeed` simulator. The simulator is not vendored into this
-repository; build it separately and point the runner at the compiled Python
-module directory.
+This folder contains the Slay-the-Spire-style experiment hooks. It adds a thin
+Python runner for the external `gamerpuppy/sts_lightspeed` simulator. The
+simulator is not vendored into this repository; build it separately and point
+the runner at the compiled Python module directory.
 
 ## Build sts_lightspeed
 
@@ -21,10 +21,42 @@ cmake -S . -B build-py39 \
 cmake --build build-py39 --target slaythespire --config Release -j 8
 ```
 
+## Test Python Simulator Setup
+
+From this repository root, verify that Python can import and run the simulator:
+
+```bash
+PYTHONPATH=/tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
+/usr/bin/python3 - <<'PY'
+import slaythespire as sts
+
+gc = sts.GameContext(sts.CharacterClass.IRONCLAD, 1, 0)
+agent = sts.Agent()
+agent.simulation_count_base = 1
+agent.playout(gc)
+
+print("seed", sts.get_seed_str(1))
+print("outcome", gc.outcome)
+print("floor", gc.floor_num)
+print("hp", gc.cur_hp)
+print("deck_size", len(gc.deck))
+PY
+```
+
+Expected shape:
+
+```text
+seed 1
+outcome GameOutcome.PLAYER_LOSS
+floor 2
+hp 0
+deck_size 12
+```
+
 ## Run Baselines
 
 ```bash
-/usr/bin/python3 scripts/sts_lightspeed_baseline.py \
+/usr/bin/python3 sts/sts_lightspeed_baseline.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 100 \
   --start-seed 1 \
@@ -43,6 +75,45 @@ four deck policies:
 
 Use `--jsonl path/to/file.jsonl` to write per-run decks and card-reward
 decisions for later analysis.
+
+## Basic Baseline Strategy Tests
+
+Run a tiny deterministic smoke comparison before larger experiments:
+
+```bash
+/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+  --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
+  --games 5 \
+  --start-seed 1 \
+  --simulation-count 1 \
+  --deck-policy agent
+
+/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+  --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
+  --games 5 \
+  --start-seed 1 \
+  --simulation-count 1 \
+  --deck-policy skip
+
+/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+  --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
+  --games 5 \
+  --start-seed 1 \
+  --simulation-count 1 \
+  --deck-policy heuristic \
+  --show-trials
+```
+
+These commands exercise three different strategy paths:
+
+- `agent`: one call into the upstream `sts_lightspeed` agent.
+- `skip`: Python pauses at card rewards and skips them.
+- `heuristic`: Python pauses at card rewards, scores the choices, and records
+  every decision.
+
+For the `heuristic --show-trials` smoke test, the output should include a
+summary followed by JSON rows containing `reward_options`, `picked`, final
+`deck`, and final `floor`.
 
 ## Trial Results
 
@@ -110,4 +181,3 @@ The first model should probably be a small contextual card picker:
 
 That keeps the action space small and lets combat remain controlled by
 `sts_lightspeed` search while deck-building improves.
-
