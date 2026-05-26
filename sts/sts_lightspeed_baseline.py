@@ -234,6 +234,11 @@ def run_trial(
             after = state_key(gc)
             if after == before:
                 raise RuntimeError(f"sts_lightspeed playout stalled at {after}")
+        if gc.outcome == sts.GameOutcome.UNDECIDED:
+            raise RuntimeError(
+                "trial reached --max-decisions before terminal outcome; "
+                f"seed={seed} policy={deck_policy} max_decisions={max_decisions}"
+            )
 
     return TrialResult(
         seed=seed,
