@@ -4,7 +4,7 @@ This repository has repo-side wiring for CI, Codex autofix, Slack traces, and Li
 
 ## What is configured in this repo
 
-- `.github/workflows/ci.yml` runs `pytest` on pushes and pull requests.
+- `.github/workflows/ci.yml` installs and tests the `2048` package from the repository root on pushes and pull requests.
 - Native Codex review is the single PR review path. Configure it in Codex cloud settings instead of also running a repo-side review workflow.
 - `.github/workflows/codex-pr-autofix.yml` automatically fixes Codex-authored review feedback, lets trusted users comment `/codex fix`, and supports manual workflow runs.
 - `.github/workflows/pr-traces.yml` posts pull request lifecycle traces to Slack and Linear when the required secrets are present.
