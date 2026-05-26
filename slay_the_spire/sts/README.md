@@ -78,6 +78,36 @@ four deck policies:
 Use `--jsonl path/to/file.jsonl` to write per-run decks and card-reward
 decisions for later analysis.
 
+## Combat-Only Policy Work
+
+The combat-only long-run plan is in `slay_the_spire/sts/COMBAT_PLAN.md`. It is
+intentionally separate from deck building, route selection, shops, rests,
+upgrades, and reward picking.
+
+Current implementation checkpoints:
+
+- `combat_api.py`: serializable combat state/action contracts plus a placeholder
+  `sts_lightspeed` adapter that raises until action-level bindings exist.
+- `combat_search.py`: deterministic beam-search skeleton over an abstract combat
+  simulator.
+- `combat_trajectory.py`: JSONL-safe combat trajectory records for future data
+  collection.
+- `combat_value.py` and `combat_policy.py`: handcrafted value scoring and policy
+  prior/ranking helpers for local adapters and fixtures.
+- `combat_eval.py`: combat-only metric aggregation for deterministic seed-suite
+  comparisons once live combat metrics are available.
+
+Run the local combat tests from the repository root:
+
+```bash
+python -m pytest slay_the_spire/sts/test_combat_*.py -q
+```
+
+These tests use local fake, dict-backed, and protocol adapters. They do not
+exercise live `sts_lightspeed` combat action bindings, because the current
+Python binding still does not expose legal combat actions or single-action
+application.
+
 ## Basic Baseline Strategy Tests
 
 Run the simulator smoke test before larger experiments:
