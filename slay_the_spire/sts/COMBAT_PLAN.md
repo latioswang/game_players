@@ -144,7 +144,10 @@ iteratively.
 ## Evaluation
 
 Use deterministic seed suites and compare against the current external-agent
-combat baseline.
+baseline. Until action-level combat bindings exist, live comparisons are limited
+to full-run metrics exposed by the current `sts_lightspeed` Python binding.
+Combat-only metrics become live baseline metrics once the binding can pause at
+combat decisions, apply one action, and report combat outcomes.
 
 Track:
 
