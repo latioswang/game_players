@@ -58,8 +58,9 @@
   Acceptance now covers converting upstream-shaped legal-action payloads into
   existing combat actions without changing fixture behavior, wrapping the
   stateful backend for search callers, preserving terminal-state snapshots,
-  and rejecting stale action payloads with explicit adapter errors instead of
-  silent fallbacks.
+  cloning before simulator mutations so search/history input states remain
+  reusable, and rejecting stale action payloads with explicit adapter errors
+  instead of silent fallbacks.
 - Documented the live-binding bridge acceptance path: pause a fixed-seed
   `sts_lightspeed` combat at each player decision, enumerate payload-backed
   legal actions, apply exactly one selected action, refresh the combat snapshot,

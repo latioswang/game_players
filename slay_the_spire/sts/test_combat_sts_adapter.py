@@ -138,7 +138,7 @@ class FakeCombatHandle:
         }
 
     def clone(self) -> "FakeCombatHandle":
-        return FakeCombatHandle(
+        return type(self)(
             monster_hp=self.monster_hp,
             player_hp=self.player_hp,
             turn=self.turn,
@@ -274,18 +274,21 @@ def test_backend_simulator_wraps_live_backend_for_search_callers() -> None:
     backend = StsLightspeedCombatAdapter(FakeCombatHandle())
     simulator = CombatBackendSimulator()
     state = simulator.wrap(backend)
+    before_action_keys = [action.action_key() for action in simulator.legal_actions(state)]
 
     assert isinstance(simulator, CombatSimulator)
     assert state.player.hp == 70
 
-    cloned = simulator.clone(state)
-    outcome = simulator.step(cloned, simulator.legal_actions(cloned)[0])
+    outcome = simulator.step(state, simulator.legal_actions(state)[0])
 
     assert outcome.before.monsters[0].hp == 40
     assert outcome.after.monsters[0].hp == 34
     assert outcome.metrics_delta.cards_played == 1
     assert outcome.metrics_delta.damage_dealt == 6
     assert state.monsters[0].hp == 40
+    assert [action.action_key() for action in simulator.legal_actions(outcome.before)] == before_action_keys
+    assert simulator.clone(outcome.before).monsters[0].hp == 40
+    assert backend.metrics().damage_dealt == 0
 
 
 def test_backend_state_snapshots_terminal_status_before_mutating_backend() -> None:
@@ -297,6 +300,19 @@ def test_backend_state_snapshots_terminal_status_before_mutating_backend() -> No
 
     assert not outcome.before.is_terminal
     assert outcome.after.is_terminal
+
+
+def test_advance_to_decision_does_not_mutate_input_backend_state() -> None:
+    backend = StsLightspeedCombatAdapter(AdvancingCombatHandle())
+    simulator = CombatBackendSimulator()
+    state = simulator.wrap(backend)
+
+    advanced = simulator.advance_to_decision(state)
+
+    assert state.turn == 1
+    assert advanced.turn == 2
+    assert simulator.clone(state).turn == 1
+    assert backend.observe().turn == 1
 
 
 def _starting_hand() -> list[dict[str, Any]]:
@@ -340,3 +356,8 @@ def _empty_metrics() -> dict[str, Any]:
 class TerminalAfterStrikeHandle(FakeCombatHandle):
     def is_terminal(self) -> bool:
         return self.monster_hp <= 34
+
+
+class AdvancingCombatHandle(FakeCombatHandle):
+    def advance_to_player_decision(self) -> None:
+        self.turn += 1

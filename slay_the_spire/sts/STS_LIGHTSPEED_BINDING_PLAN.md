@@ -72,7 +72,8 @@ payload, and expose the existing `CombatBackend` protocol:
 - `CombatBackendSimulator` wraps the stateful backend for search callers and
   computes per-action metric deltas from before/after backend metrics. Wrapped
   states snapshot terminal status so historical outcomes are not affected by
-  later backend mutations.
+  later backend mutations, and simulator operations clone before mutating so
+  input states remain reusable search/history nodes.
 
 This keeps search, value models, trajectories, and evaluation coupled only to
 `CombatBackend`, while the adapter owns all pybind payload drift and validation.

@@ -288,23 +288,25 @@ class CombatBackendSimulator:
 
     def step(self, state: BackendCombatState, action: CombatAction) -> BackendActionOutcome:
         before = state
-        before_metrics = state.backend.metrics()
-        state.backend.apply(action)
-        after = self.wrap(state.backend)
+        working_backend = state.backend.clone()
+        before_metrics = working_backend.metrics()
+        working_backend.apply(action)
+        after = self.wrap(working_backend)
         return BackendActionOutcome(
             before=before,
             action=action,
             after=after,
-            metrics_delta=combat_metrics_delta(before_metrics, state.backend.metrics()),
+            metrics_delta=combat_metrics_delta(before_metrics, working_backend.metrics()),
         )
 
     def clone(self, state: BackendCombatState) -> BackendCombatState:
         return self.wrap(state.backend.clone())
 
     def advance_to_decision(self, state: BackendCombatState) -> BackendCombatState:
+        working_backend = state.backend.clone()
         if not state.is_terminal:
-            state.backend.advance_to_player_decision()
-        return self.wrap(state.backend)
+            working_backend.advance_to_player_decision()
+        return self.wrap(working_backend)
 
 
 def combat_metrics_delta(before: CombatMetrics, after: CombatMetrics) -> CombatMetrics:
