@@ -9,5 +9,6 @@ models/
 results.tsv
 venv/
 venv-*/
-.venv/
+.venv
 *.egg-info/
+build/
