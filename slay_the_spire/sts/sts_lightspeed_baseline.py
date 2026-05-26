@@ -209,47 +209,81 @@ def run_trial(
         initial_deck = [card_name(card) for card in gc.deck]
         agent.playout(gc)
         cards_picked = deck_additions(initial_deck, [card_name(card) for card in gc.deck])
-    else:
-        while gc.outcome == sts.GameOutcome.UNDECIDED:
-            if len(decisions) >= max_decisions:
-                raise RuntimeError(
-                    "trial reached --max-decisions before terminal outcome; "
-                    f"seed={seed} policy={deck_policy} max_decisions={max_decisions}"
-                )
-            before = state_key(gc)
-            agent.playout(gc)
-            if gc.outcome != sts.GameOutcome.UNDECIDED:
-                break
-            rewards = list(gc.get_card_reward())
-            if rewards:
-                picked, scores = choose_reward(gc, rewards, deck_policy)
-                decision = DecisionLog(
-                    floor=int(gc.floor_num),
-                    deck_size_before=len(gc.deck),
-                    reward_options=[card_name(card) for card in rewards],
-                    picked=card_name(picked) if picked is not None else None,
-                    scores=scores,
-                )
-                decisions.append(decision)
-                if picked is None:
-                    gc.skip_reward_cards()
-                    cards_skipped += 1
-                else:
-                    gc.pick_reward_card(picked)
-                    cards_picked.append(card_name(picked))
-                continue
+        return build_trial_result(
+            gc=gc,
+            seed=seed,
+            ascension=ascension,
+            simulation_count=simulation_count,
+            deck_policy=deck_policy,
+            cards_picked=cards_picked,
+            cards_skipped=cards_skipped,
+            decisions=decisions,
+        )
 
-            after = state_key(gc)
-            if after == before:
-                raise RuntimeError(f"sts_lightspeed playout stalled at {after}")
+    while gc.outcome == sts.GameOutcome.UNDECIDED:
+        if len(decisions) >= max_decisions:
+            raise RuntimeError(
+                "trial reached --max-decisions before terminal outcome; "
+                f"seed={seed} policy={deck_policy} max_decisions={max_decisions}"
+            )
+        before = state_key(gc)
+        agent.playout(gc)
+        if gc.outcome != sts.GameOutcome.UNDECIDED:
+            break
+        rewards = list(gc.get_card_reward())
+        if rewards:
+            picked, scores = choose_reward(gc, rewards, deck_policy)
+            decision = DecisionLog(
+                floor=int(gc.floor_num),
+                deck_size_before=len(gc.deck),
+                reward_options=[card_name(card) for card in rewards],
+                picked=card_name(picked) if picked is not None else None,
+                scores=scores,
+            )
+            decisions.append(decision)
+            if picked is None:
+                gc.skip_reward_cards()
+                cards_skipped += 1
+            else:
+                gc.pick_reward_card(picked)
+                cards_picked.append(card_name(picked))
+            continue
 
+        after = state_key(gc)
+        if after == before:
+            raise RuntimeError(f"sts_lightspeed playout stalled at {after}")
+
+    return build_trial_result(
+        gc=gc,
+        seed=seed,
+        ascension=ascension,
+        simulation_count=simulation_count,
+        deck_policy=deck_policy,
+        cards_picked=cards_picked,
+        cards_skipped=cards_skipped,
+        decisions=decisions,
+    )
+
+
+def build_trial_result(
+    *,
+    gc: Any,
+    seed: int,
+    ascension: int,
+    simulation_count: int,
+    deck_policy: str,
+    cards_picked: list[str],
+    cards_skipped: int,
+    decisions: list[DecisionLog],
+) -> TrialResult:
+    outcome = enum_name(gc.outcome)
     return TrialResult(
         seed=seed,
         ascension=ascension,
         simulation_count=simulation_count,
         deck_policy=deck_policy,
-        outcome=enum_name(gc.outcome),
-        won=gc.outcome == sts.GameOutcome.PLAYER_VICTORY,
+        outcome=outcome,
+        won=outcome == "PLAYER_VICTORY",
         floor=int(gc.floor_num),
         hp=int(gc.cur_hp),
         max_hp=int(gc.max_hp),
