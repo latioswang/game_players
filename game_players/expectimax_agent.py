@@ -12,7 +12,20 @@ from typing import Iterable
 import numpy as np
 from numba import njit
 
-from .game2048 import ACTION_NAMES, DOWN, LEFT, RIGHT, UP, Action, Board, GameResult, max_tile, new_game
+from .game2048 import (
+    ACTION_NAMES,
+    DOWN,
+    LEFT,
+    RIGHT,
+    UP,
+    Action,
+    Board,
+    GameResult,
+    add_random_tile,
+    max_tile,
+    move,
+    new_game,
+)
 
 
 MAX_DEPTH = 5
@@ -53,20 +66,25 @@ class ExpectimaxAgent:
         heuristic_score(np.uint64(board))
         self.choose_action(board)
 
-    def choose_action(self, board: int) -> Action | None:
-        action = int(choose_action_numba(np.uint64(board), self.depth))
+    def choose_action(self, board: int | Board) -> Action | None:
+        is_packed = isinstance(board, (int, np.integer))
+        board_tuple = unpack_board(int(board)) if is_packed else board
+        if _needs_reference_rules(board_tuple):
+            return _choose_action_reference(board_tuple, self.depth)
+        packed = int(board) if is_packed else pack_board(board)
+        action = int(choose_action_numba(np.uint64(packed), self.depth))
         return None if action < 0 else action
 
     def play_episode(self, rng: random.Random) -> GameResult:
-        board = pack_board(new_game(rng))
+        board = new_game(rng)
         total_reward = 0
         moves = 0
         while True:
             action = self.choose_action(board)
             if action is None:
-                return GameResult(total_reward, packed_max_tile(board), moves, unpack_board(board))
-            after, reward = move_packed(np.uint64(board), action)
-            board = add_random_tile_packed(int(after), rng)
+                return GameResult(total_reward, max_tile(board), moves, board)
+            after, reward = move(board, action) if _needs_reference_rules(board) else _move_packed_board(board, action)
+            board = add_random_tile(after, rng)
             total_reward += int(reward)
             moves += 1
 
@@ -167,6 +185,115 @@ def spawn_probability_sum(board: int) -> float:
 
 def action_name(action: Action | None) -> str:
     return "none" if action is None else ACTION_NAMES[action]
+
+
+def _needs_reference_rules(board: Board) -> bool:
+    return max(board) >= 15
+
+
+def _move_packed_board(board: Board, action: Action) -> tuple[Board, int]:
+    after, reward = _move_packed_numba(np.uint64(pack_board(board)), action)
+    return unpack_board(int(after)), int(reward)
+
+
+def _choose_action_reference(board: Board, depth: int) -> Action | None:
+    cache: dict[tuple[Board, int, int], float] = {}
+    best_action: Action | None = None
+    best_value = float("-inf")
+    for action in ACTION_ORDER:
+        after, reward = move(board, action)
+        if after == board:
+            continue
+        value = float(reward) + _chance_value_reference(after, depth - 1, cache)
+        if value > best_value:
+            best_value = value
+            best_action = action
+    return best_action
+
+
+def _chance_value_reference(after: Board, depth: int, cache: dict[tuple[Board, int, int], float]) -> float:
+    key = (after, depth, CHANCE_NODE)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    empties = [index for index, value in enumerate(after) if value == 0]
+    if not empties:
+        value = _max_value_reference(after, depth, cache)
+    else:
+        probability_per_cell = 1.0 / len(empties)
+        value = 0.0
+        for index in empties:
+            board_list = list(after)
+            board_list[index] = 1
+            value += 0.9 * probability_per_cell * _max_value_reference(tuple(board_list), depth, cache)
+            board_list[index] = 2
+            value += 0.1 * probability_per_cell * _max_value_reference(tuple(board_list), depth, cache)
+    cache[key] = value
+    return value
+
+
+def _max_value_reference(board: Board, depth: int, cache: dict[tuple[Board, int, int], float]) -> float:
+    key = (board, depth, MAX_NODE)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    if depth <= 0:
+        value = _heuristic_score_reference(board)
+        cache[key] = value
+        return value
+
+    best = float("-inf")
+    for action in ACTION_ORDER:
+        after, reward = move(board, action)
+        if after == board:
+            continue
+        value = float(reward) + _chance_value_reference(after, depth - 1, cache)
+        if value > best:
+            best = value
+    if best == float("-inf"):
+        best = 0.0
+    cache[key] = best
+    return best
+
+
+def _heuristic_score_reference(board: Board) -> float:
+    empty_count = sum(1 for value in board if value == 0)
+    max_exp = max(board)
+    max_index = board.index(max_exp) if max_exp else 0
+    values = [0.0 if exp == 0 else 2.0**exp for exp in board]
+    value_sum = sum(values)
+
+    best_snake = max(sum(values[index] * float(path[index]) for index in range(16)) for path in SNAKE_WEIGHTS)
+
+    smoothness = 0.0
+    merge_potential = 0.0
+    for row in range(4):
+        for col in range(3):
+            left = board[row * 4 + col]
+            right = board[row * 4 + col + 1]
+            if left != 0 and right != 0:
+                smoothness += abs(left - right)
+                if left == right:
+                    merge_potential += 2.0 ** (left + 1)
+    for col in range(4):
+        for row in range(3):
+            top = board[row * 4 + col]
+            bottom = board[(row + 1) * 4 + col]
+            if top != 0 and bottom != 0:
+                smoothness += abs(top - bottom)
+                if top == bottom:
+                    merge_potential += 2.0 ** (top + 1)
+
+    corner_bonus = (2.0**max_exp) * 8.0 if max_index in (0, 3, 12, 15) else 0.0
+    return (
+        value_sum * 2.0
+        + float(empty_count) * 10000.0
+        + best_snake * 8.0
+        + merge_potential * 25.0
+        + corner_bonus
+        - smoothness * 250.0
+    )
 
 
 def _chance_value(after: int, depth: int, cache: dict[tuple[int, int, int], float]) -> float:
@@ -275,8 +402,18 @@ def _set_tile(board: np.uint64, index: int, value: int) -> np.uint64:
     return (board & clear_mask) | (np.uint64(value) << shift)
 
 
-@njit(cache=True, nogil=True)
 def move_packed(board: int, action: int) -> tuple[np.uint64, int]:
+    board_tuple = unpack_board(int(board))
+    if _needs_reference_rules(board_tuple):
+        after, reward = move(board_tuple, action)
+        if any(value > 15 for value in after):
+            raise ValueError("packed move cannot represent tile exponents above 15; use board-level rules")
+        return np.uint64(pack_board(after)), reward
+    return _move_packed_numba(np.uint64(board), action)
+
+
+@njit(cache=True, nogil=True)
+def _move_packed_numba(board: int, action: int) -> tuple[np.uint64, int]:
     source = np.uint64(board)
     result = np.uint64(0)
     reward = 0
@@ -387,7 +524,7 @@ def choose_action_numba(board: np.uint64, depth: int) -> int:
     best_action = -1
     best_value = -1.0e30
     for action in range(4):
-        after, reward = move_packed(board, action)
+        after, reward = _move_packed_numba(board, action)
         if after == board:
             continue
         value = float(reward) + _expectimax_value(after, depth - 1, True)
@@ -420,7 +557,7 @@ def _expectimax_value(board: np.uint64, depth: int, is_chance: bool) -> float:
 
     best = -1.0e30
     for action in range(4):
-        after, reward = move_packed(board, action)
+        after, reward = _move_packed_numba(board, action)
         if after == board:
             continue
         value = float(reward) + _expectimax_value(after, depth - 1, True)
