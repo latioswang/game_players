@@ -1,0 +1,106 @@
+name: Codex PR review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: codex-pr-review-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review with Codex
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.draft == false }}
+    env:
+      HAS_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+    outputs:
+      final_message: ${{ steps.run_codex.outputs.final-message }}
+
+    steps:
+      - name: Skip when OPENAI_API_KEY is not configured
+        if: ${{ env.HAS_OPENAI_API_KEY != 'true' }}
+        run: |
+          echo "OPENAI_API_KEY is not configured; skipping Codex PR review."
+
+      - name: Check out pull request merge
+        if: ${{ env.HAS_OPENAI_API_KEY == 'true' }}
+        uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+
+      - name: Fetch base and head refs
+        if: ${{ env.HAS_OPENAI_API_KEY == 'true' }}
+        run: |
+          git fetch --no-tags origin \
+            ${{ github.event.pull_request.base.ref }} \
+            +refs/pull/${{ github.event.pull_request.number }}/head
+
+      - name: Write trusted Codex review prompt
+        if: ${{ env.HAS_OPENAI_API_KEY == 'true' }}
+        run: git show ${{ github.event.pull_request.base.sha }}:.github/codex/prompts/review.md > "${RUNNER_TEMP}/codex-review-prompt.md"
+
+      - name: Run Codex review
+        if: ${{ env.HAS_OPENAI_API_KEY == 'true' }}
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/codex-review-prompt.md
+          output-file: ${{ runner.temp }}/codex-review.md
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+
+      - name: Post Codex feedback
+        if: ${{ steps.run_codex.outputs.final-message != '' }}
+        uses: actions/github-script@v7
+        env:
+          CODEX_FINAL_MESSAGE: ${{ steps.run_codex.outputs.final-message }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const body = process.env.CODEX_FINAL_MESSAGE || "";
+            if (!body.trim()) {
+              return;
+            }
+
+            const gateLine = body.match(/^Gate:\s*(pass|fail)\b/im);
+            const explicitlyPasses = /\bno high-priority (?:correctness or maintainability )?issues? found\b/i.test(body);
+            const hasBlockingFinding =
+              /\bfound (?:one |[0-9]+ )?high-priority issue/i.test(body) ||
+              /\bhigh severity\b/i.test(body) ||
+              /\bseverity:\s*high\b/i.test(body) ||
+              /^-\s*\*\*High\b/im.test(body);
+            const gatePasses = gateLine
+              ? gateLine[1].toLowerCase() === "pass" && !hasBlockingFinding
+              : explicitlyPasses && !hasBlockingFinding;
+            const gateDescription = gatePasses
+              ? "Codex reviewed the latest PR head with no blocking findings."
+              : hasBlockingFinding
+                ? "Codex found high-priority findings on the latest PR head."
+                : "Codex review did not produce an explicit pass result.";
+
+            const { data: comment } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: `<!-- codex-pr-review:${context.payload.pull_request.head.sha} -->\n${body}`,
+            });
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: gatePasses ? "success" : "failure",
+              context: "Codex review gate",
+              description: gateDescription,
+              target_url: comment.html_url,
+            });
