@@ -10,5 +10,5 @@ Make the smallest changes that address the review feedback and CI failures. Pres
 
 After editing:
 
-- Run `pytest` if practical.
+- Run the relevant project tests from the repository root, such as `python -m pytest 2048/tests`, if practical.
 - Summarize the fixes and any remaining risk in your final response.

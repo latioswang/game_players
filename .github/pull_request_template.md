@@ -8,7 +8,7 @@ Linear issue:
 
 ## Validation
 
-- [ ] `pytest`
+- [ ] `python -m pytest 2048/tests`
 
 ## Codex
 
