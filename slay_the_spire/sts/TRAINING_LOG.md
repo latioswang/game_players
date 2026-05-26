@@ -27,3 +27,6 @@
   `python -m pytest slay_the_spire/sts/test_combat_*.py -q`: 42 passed.
 - Verified the Slay-the-Spire suite with `python -m pytest slay_the_spire/sts -q`:
   43 passed, 1 skipped because `STS_LIGHTSPEED_MODULE_DIR` is not set.
+- Fixed Codex review finding: non-targetable monsters with positive HP now
+  remain alive for value evaluation and no longer produce false terminal
+  victories.

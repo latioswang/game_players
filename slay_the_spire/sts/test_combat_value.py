@@ -152,6 +152,30 @@ def test_scores_combat_api_state_player_energy() -> None:
     assert value.details["energy"] == 3.75
 
 
+def test_non_targetable_alive_monster_is_not_terminal_victory() -> None:
+    evaluator = HandcraftedCombatValueEvaluator()
+
+    value = evaluator.evaluate(
+        ApiCombatState(
+            player=PlayerState(hp=40, max_hp=80),
+            monsters=(
+                MonsterState(
+                    monster_id="lagavulin-0",
+                    name="Lagavulin",
+                    hp=109,
+                    max_hp=109,
+                    targetable=False,
+                ),
+            ),
+        )
+    )
+
+    assert value.terminal is None
+    assert value.alive_enemies == 1
+    assert value.enemy_hp == 109
+    assert value.score < 100_000
+
+
 def test_evaluate_actions_uses_successor_states_when_available() -> None:
     evaluator = HandcraftedCombatValueEvaluator()
     current = FallbackCombatState(

@@ -369,8 +369,7 @@ def _is_alive(monster: Any) -> bool:
     if alive is not None and not bool(alive):
         return False
     hp = _int(_get(monster, "cur_hp", "current_hp", "hp", default=0))
-    targetable = _get(monster, "targetable", "is_targetable", default=True)
-    return hp > 0 and bool(targetable)
+    return hp > 0
 
 
 def _monster_intent_damage(monster: Any) -> int:
