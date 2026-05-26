@@ -3,6 +3,7 @@
 ## Repository expectations
 
 - This is a Python package for reinforcement-learning game players.
+- For each new Codex implementation or fix chat session, create a fresh Git worktree before modifying repository files. Use a dedicated `codex/...` branch/worktree, work only inside that worktree, and leave the primary checkout untouched unless the user explicitly asks otherwise.
 - Install local development dependencies with `python -m pip install -e ".[dev]"`.
 - Run the test suite with `pytest`.
 - Keep generated models, plots, metrics, and large experiment outputs out of commits unless explicitly requested.
