@@ -30,3 +30,26 @@
 - Fixed Codex review finding: non-targetable monsters with positive HP now
   remain alive for value evaluation and no longer produce false terminal
   victories.
+- Advanced the `COMBAT_PLAN.md` Recommended Sequence checkpoint wording to
+  separate completed local fixture/planner/model work from the remaining live
+  simulator integration work.
+- Current completed local layer: combat contracts, fixture/protocol adapters,
+  serialization helpers, cloning tests, beam search, trajectory records,
+  handcrafted value evaluation, policy ranking, and metric aggregation.
+- Current blocker: live `sts_lightspeed` action bindings still do not expose
+  legal combat actions, single-action application, action-level combat
+  pause/resume, cheap live state cloning, or combat-only outcome metrics.
+- Next checkpoint: implement and validate the live action-binding adapter, then
+  run the existing planner/value/policy helpers against fixed-seed live combats.
+- Added deterministic local sequence-completion modules:
+  `combat_fixture.py`, `combat_training.py`, `combat_hybrid.py`, and
+  `combat_experiment.py`.
+- Added `STS_LIGHTSPEED_BINDING_PLAN.md` after inspecting upstream
+  `BattleContext`, `BattleSimulator`, `InputState`, `CardManager`, and
+  `Monster` internals. The recommendation remains to expose action-level
+  pybind hooks upstream rather than porting the C++ combat engine into Python.
+- Addressed final integration review findings: new modules now support package
+  imports, fixture Vulnerable affects later attack damage, non-terminal fixture
+  outcomes must point to a next step, and the binding plan now specifies
+  command/index resolution, card-select task metadata, potion discard actions,
+  and adapter-owned metrics counters.

@@ -96,6 +96,27 @@ Current implementation checkpoints:
   prior/ranking helpers for local adapters and fixtures.
 - `combat_eval.py`: combat-only metric aggregation for deterministic seed-suite
   comparisons once live combat metrics are available.
+- `combat_fixture.py`: deterministic local Strike/Defend/Bash-style combat
+  fixture with cloning and JSON state round trips.
+- `combat_training.py`: no-dependency sparse linear value-function training from
+  trajectory value records.
+- `combat_hybrid.py`: policy-pruned, value-guided beam-search orchestration.
+- `combat_experiment.py`: fixed-seed fixture policy comparisons, regression
+  tracking, and optional JSONL trajectory output.
+- `STS_LIGHTSPEED_BINDING_PLAN.md`: concrete upstream binding checklist for the
+  remaining live simulator blocker.
+
+Recommended Sequence checkpoint:
+
+- Completed in local fixture/protocol space: state/action contracts,
+  serialization helpers, cloning tests, beam-search planning, trajectory
+  records, handcrafted value scoring, policy ranking, and metric aggregation.
+- Still blocked in live `sts_lightspeed`: legal combat-action enumeration,
+  single-action application, action-level combat pause/resume, cheap live state
+  cloning, and combat-only outcome reporting are not exposed by the current
+  Python binding.
+- Next work item: implement the live action-binding adapter, then run the
+  already-built planner and model helpers against fixed-seed simulator combats.
 
 Run the local combat tests from the repository root:
 
@@ -106,7 +127,8 @@ python -m pytest slay_the_spire/sts/test_combat_*.py -q
 These tests use local fake, dict-backed, and protocol adapters. They do not
 exercise live `sts_lightspeed` combat action bindings, because the current
 Python binding still does not expose legal combat actions or single-action
-application.
+application. Passing these tests means the local fixture/planner/model layer is
+ready for a future live adapter; it does not mean live combat bindings exist.
 
 ## Basic Baseline Strategy Tests
 

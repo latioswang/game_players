@@ -169,6 +169,21 @@ def test_negative_potion_slot_is_rejected() -> None:
         CombatAction.use_potion(-1)
 
 
+def test_future_binding_action_shapes_cover_potion_discard_and_card_select() -> None:
+    discard = CombatAction.discard_potion(2)
+    select = CombatAction.select_card(
+        "card-9",
+        stable_id="select:discard:card-9",
+        metadata={"source_zone": "discard", "task": "headbutt"},
+    )
+
+    assert discard.action_type is ActionType.DISCARD_POTION
+    assert discard.action_key() == "discard_potion:2"
+    assert select.action_type is ActionType.SELECT_CARD
+    assert select.action_key() == "select:discard:card-9"
+    assert select.to_json()["metadata"] == {"source_zone": "discard", "task": "headbutt"}
+
+
 class FakeSimulator:
     def legal_actions(self, state: CombatState) -> Sequence[CombatAction]:
         return legal_player_actions(state)

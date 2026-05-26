@@ -22,6 +22,8 @@ class ActionType(str, Enum):
 
     PLAY_CARD = "play_card"
     USE_POTION = "use_potion"
+    DISCARD_POTION = "discard_potion"
+    SELECT_CARD = "select_card"
     END_TURN = "end_turn"
 
 
@@ -162,9 +164,11 @@ class CombatAction:
     potion_slot: int | None = None
     stable_id: str | None = None
     label: str | None = None
+    metadata: dict[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "action_type", _coerce_enum(ActionType, self.action_type, "action_type"))
+        object.__setattr__(self, "metadata", _json_value(self.metadata))
         if self.potion_slot is not None and self.potion_slot < 0:
             raise ValueError("potion slot must be non-negative")
 
@@ -185,6 +189,27 @@ class CombatAction:
         )
 
     @classmethod
+    def discard_potion(cls, potion_slot: int) -> "CombatAction":
+        return cls(action_type=ActionType.DISCARD_POTION, potion_slot=potion_slot)
+
+    @classmethod
+    def select_card(
+        cls,
+        card_instance_id: str | None = None,
+        *,
+        stable_id: str | None = None,
+        label: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
+    ) -> "CombatAction":
+        return cls(
+            action_type=ActionType.SELECT_CARD,
+            card_instance_id=card_instance_id,
+            stable_id=stable_id,
+            label=label,
+            metadata={} if metadata is None else metadata,
+        )
+
+    @classmethod
     def end_turn(cls) -> "CombatAction":
         return cls(action_type=ActionType.END_TURN)
 
@@ -199,6 +224,10 @@ class CombatAction:
             return f"play:{self.card_instance_id}:{self.monster_id}"
         if self.action_type is ActionType.USE_POTION:
             return f"potion:{self.potion_slot}:{self.monster_id}"
+        if self.action_type is ActionType.DISCARD_POTION:
+            return f"discard_potion:{self.potion_slot}"
+        if self.action_type is ActionType.SELECT_CARD:
+            return f"select:{self.card_instance_id}:{self.metadata.get('source_zone', '')}"
         return "end_turn"
 
     def to_json(self) -> dict[str, JsonValue]:
