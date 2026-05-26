@@ -207,7 +207,12 @@ def run_trial(
     if deck_policy == "agent":
         agent.playout(gc)
     else:
-        while gc.outcome == sts.GameOutcome.UNDECIDED and len(decisions) < max_decisions:
+        while gc.outcome == sts.GameOutcome.UNDECIDED:
+            if len(decisions) >= max_decisions:
+                raise RuntimeError(
+                    "trial reached --max-decisions before terminal outcome; "
+                    f"seed={seed} policy={deck_policy} max_decisions={max_decisions}"
+                )
             before = state_key(gc)
             agent.playout(gc)
             if gc.outcome != sts.GameOutcome.UNDECIDED:
@@ -234,11 +239,6 @@ def run_trial(
             after = state_key(gc)
             if after == before:
                 raise RuntimeError(f"sts_lightspeed playout stalled at {after}")
-        if gc.outcome == sts.GameOutcome.UNDECIDED:
-            raise RuntimeError(
-                "trial reached --max-decisions before terminal outcome; "
-                f"seed={seed} policy={deck_policy} max_decisions={max_decisions}"
-            )
 
     return TrialResult(
         seed=seed,
