@@ -56,7 +56,7 @@ deck_size 12
 ## Run Baselines
 
 ```bash
-/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+/usr/bin/python3 slay_the_spire/sts/sts_lightspeed_baseline.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 100 \
   --start-seed 1 \
@@ -81,7 +81,7 @@ decisions for later analysis.
 Run the simulator smoke test before larger experiments:
 
 ```bash
-/usr/bin/python3 sts/smoke_test_sts_lightspeed.py \
+/usr/bin/python3 slay_the_spire/sts/smoke_test_sts_lightspeed.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 5 \
   --start-seed 1 \
@@ -99,21 +99,21 @@ direct simulator playout, then runs three baseline strategy paths:
 You can also run the strategy commands individually:
 
 ```bash
-/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+/usr/bin/python3 slay_the_spire/sts/sts_lightspeed_baseline.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 5 \
   --start-seed 1 \
   --simulation-count 1 \
   --deck-policy agent
 
-/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+/usr/bin/python3 slay_the_spire/sts/sts_lightspeed_baseline.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 5 \
   --start-seed 1 \
   --simulation-count 1 \
   --deck-policy skip
 
-/usr/bin/python3 sts/sts_lightspeed_baseline.py \
+/usr/bin/python3 slay_the_spire/sts/sts_lightspeed_baseline.py \
   --module-dir /tmp/codex-sts-sim-eval/sts_lightspeed/build-py39 \
   --games 5 \
   --start-seed 1 \

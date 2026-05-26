@@ -2,6 +2,6 @@
 
 Workspace for the Slay the Spire AI project.
 
-No package code has been added yet. When implementation starts, keep the project
-self-contained here with its own package metadata, source tree, tests, and local
-documentation.
+Current experiment hooks live under [`sts/`](sts/). They use the external
+`gamerpuppy/sts_lightspeed` simulator and keep the simulator itself out of this
+repository.
