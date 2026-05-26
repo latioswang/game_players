@@ -67,7 +67,9 @@ deck_size 12
 The script evaluates sequential seeds using Ironclad at ascension 0. It supports
 four deck policies:
 
-- `agent`: let the upstream `sts_lightspeed` agent run the whole playout.
+- `agent`: let the upstream `sts_lightspeed` agent run the whole playout. The
+  current binding does not expose the agent's card-reward choices separately, so
+  reward pick/skip metrics are reported as unavailable for this policy.
 - `skip`: pause at card rewards and skip every card.
 - `first`: pause at card rewards and take the first offered card.
 - `heuristic`: pause at card rewards and score cards with a small Python rule
@@ -142,9 +144,9 @@ All runs used seeds `1..100`, ascension `0`.
 
 | Policy | Simulation Count | Games | Wins | Avg Floor | Best Floor | Avg Picked | Avg Skipped |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `agent` | 1 | 100 | 0 | 5.55 | 16 | 3.20 | 0.00 |
+| `agent` | 1 | 100 | 0 | 5.55 | 16 | unavailable | unavailable |
 | `heuristic` | 1 | 100 | 0 | 5.90 | 16 | 3.13 | 0.01 |
-| `agent` | 5 | 100 | 0 | 9.75 | 19 | 4.80 | 0.00 |
+| `agent` | 5 | 100 | 0 | 9.75 | 19 | unavailable | unavailable |
 | `heuristic` | 5 | 100 | 0 | 9.29 | 21 | 5.03 | 0.06 |
 
 Interpretation:

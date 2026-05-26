@@ -47,10 +47,12 @@ def main() -> None:
             for offset in range(args.games)
         ]
         if policy == "agent":
-            assert any(result.cards_picked for result in results)
+            assert all(not result.reward_metrics_available for result in results)
         if policy == "skip":
+            assert all(result.reward_metrics_available for result in results)
             assert all(not result.cards_picked for result in results)
         if policy == "heuristic":
+            assert all(result.reward_metrics_available for result in results)
             assert any(result.decision_count > 0 for result in results)
 
         print(f"policy={policy}")
@@ -60,4 +62,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

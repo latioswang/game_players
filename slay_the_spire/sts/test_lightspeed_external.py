@@ -44,3 +44,4 @@ def test_lightspeed_external_trial_from_env() -> None:
     assert result.outcome in {"PLAYER_LOSS", "PLAYER_VICTORY"}
     assert result.floor >= 0
     assert result.deck
+    assert result.reward_metrics_available

@@ -15,7 +15,6 @@ upstream bundled pybind11; Python 3.12 did not.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 from dataclasses import dataclass, asdict
 import json
 from pathlib import Path
@@ -93,6 +92,7 @@ class TrialResult:
     deck_size: int
     relic_count: int
     decision_count: int
+    reward_metrics_available: bool
     cards_picked: list[str]
     cards_skipped: int
     deck: list[str]
@@ -206,15 +206,14 @@ def run_trial(
     cards_skipped = 0
 
     if deck_policy == "agent":
-        initial_deck = [card_name(card) for card in gc.deck]
         agent.playout(gc)
-        cards_picked = deck_additions(initial_deck, [card_name(card) for card in gc.deck])
         return build_trial_result(
             gc=gc,
             seed=seed,
             ascension=ascension,
             simulation_count=simulation_count,
             deck_policy=deck_policy,
+            reward_metrics_available=False,
             cards_picked=cards_picked,
             cards_skipped=cards_skipped,
             decisions=decisions,
@@ -259,6 +258,7 @@ def run_trial(
         ascension=ascension,
         simulation_count=simulation_count,
         deck_policy=deck_policy,
+        reward_metrics_available=True,
         cards_picked=cards_picked,
         cards_skipped=cards_skipped,
         decisions=decisions,
@@ -272,6 +272,7 @@ def build_trial_result(
     ascension: int,
     simulation_count: int,
     deck_policy: str,
+    reward_metrics_available: bool,
     cards_picked: list[str],
     cards_skipped: int,
     decisions: list[DecisionLog],
@@ -291,6 +292,7 @@ def build_trial_result(
         deck_size=len(gc.deck),
         relic_count=len(gc.relics),
         decision_count=len(decisions),
+        reward_metrics_available=reward_metrics_available,
         cards_picked=cards_picked,
         cards_skipped=cards_skipped,
         deck=[card_name(card) for card in gc.deck],
@@ -371,15 +373,6 @@ def count_cards_by_type(cards: Iterable[Any], type_name: str) -> int:
     return sum(1 for card in cards if enum_name(card.type) == type_name)
 
 
-def deck_additions(before: list[str], after: list[str]) -> list[str]:
-    before_counts = Counter(before)
-    after_counts = Counter(after)
-    added: list[str] = []
-    for card_name_value in sorted(after_counts):
-        added.extend([card_name_value] * max(0, after_counts[card_name_value] - before_counts[card_name_value]))
-    return added
-
-
 def state_key(gc: Any) -> tuple[str, int, str, int, int]:
     return (enum_name(gc.outcome), int(gc.floor_num), enum_name(gc.screen_state), int(gc.cur_hp), len(gc.deck))
 
@@ -425,19 +418,28 @@ def summarize_results(results: list[TrialResult]) -> list[str]:
     wins = sum(result.won for result in results)
     floors = [result.floor for result in results]
     hp_values = [result.hp for result in results]
-    picks = [len(result.cards_picked) for result in results]
-    skips = [result.cards_skipped for result in results]
-    return [
+    reward_results = [result for result in results if result.reward_metrics_available]
+    summary = [
         f"games={len(results)}",
         f"wins={wins}",
         f"win_rate={wins / len(results):.3f}",
         f"avg_floor={statistics.fmean(floors):.2f}",
         f"best_floor={max(floors)}",
         f"avg_final_hp={statistics.fmean(hp_values):.2f}",
-        f"avg_cards_picked={statistics.fmean(picks):.2f}",
-        f"avg_card_rewards_skipped={statistics.fmean(skips):.2f}",
-        "outcomes=" + json.dumps(count_by(result.outcome for result in results), sort_keys=True),
     ]
+    if reward_results:
+        picks = [len(result.cards_picked) for result in reward_results]
+        skips = [result.cards_skipped for result in reward_results]
+        summary.extend(
+            [
+                f"avg_cards_picked={statistics.fmean(picks):.2f}",
+                f"avg_card_rewards_skipped={statistics.fmean(skips):.2f}",
+            ]
+        )
+    else:
+        summary.extend(["avg_cards_picked=unavailable", "avg_card_rewards_skipped=unavailable"])
+    summary.append("outcomes=" + json.dumps(count_by(result.outcome for result in results), sort_keys=True))
+    return summary
 
 
 def write_jsonl(path: Path, results: list[TrialResult]) -> None:
